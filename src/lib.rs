@@ -1,6 +1,7 @@
 use pyo3::prelude::*;
 use pyo3_asyncio::tokio::future_into_py;
 use tokio::fs::File;
+use tokio::fs::OpenOptions;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
 use csv::ReaderBuilder;
 
@@ -96,15 +97,25 @@ impl Writer {
         let path = self_.path.clone();
         Python::with_gil(|py| {
             let future = async move {
-                let mut file = File::create(&path)
+                use tokio::fs::OpenOptions;
+                // Append mode - creates file if it doesn't exist
+                let mut file = OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&path)
                     .await
-                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(format!("Failed to create file: {}", e)))?;
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(format!("Failed to open file: {}", e)))?;
                 
                 // Simple CSV writing for MVP
                 let line = row.join(",") + "\n";
                 file.write_all(line.as_bytes())
                     .await
                     .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(format!("Failed to write file: {}", e)))?;
+                
+                // Flush to ensure data is written
+                file.flush()
+                    .await
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(format!("Failed to flush file: {}", e)))?;
                 
                 Ok(())
             };
