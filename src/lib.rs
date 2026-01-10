@@ -1,9 +1,10 @@
+#![allow(non_local_definitions)] // False positive from pyo3 macros
+
+use csv::ReaderBuilder;
 use pyo3::prelude::*;
 use pyo3_asyncio::tokio::future_into_py;
 use tokio::fs::File;
-use tokio::fs::OpenOptions;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
-use csv::ReaderBuilder;
 
 /// Python bindings for rapcsv - Streaming async CSV.
 #[pymodule]
@@ -34,23 +35,27 @@ impl Reader {
         let position = self_.position;
         Python::with_gil(|py| {
             let future = async move {
-                let file = File::open(&path)
-                    .await
-                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(format!("Failed to open file: {}", e)))?;
-                
+                let file = File::open(&path).await.map_err(|e| {
+                    PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
+                        "Failed to open file: {e}"
+                    ))
+                })?;
+
                 let mut reader = BufReader::new(file);
                 let mut buffer = String::new();
                 let mut lines = Vec::new();
-                
+
                 // Read file (simplified for MVP - read all at once)
-                reader.read_to_string(&mut buffer)
-                    .await
-                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(format!("Failed to read file: {}", e)))?;
-                
+                reader.read_to_string(&mut buffer).await.map_err(|e| {
+                    PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
+                        "Failed to read file: {e}"
+                    ))
+                })?;
+
                 let mut csv_reader = ReaderBuilder::new()
                     .has_headers(false)
                     .from_reader(buffer.as_bytes());
-                
+
                 for (i, result) in csv_reader.records().enumerate() {
                     if i < position {
                         continue;
@@ -62,11 +67,13 @@ impl Reader {
                             break; // Just return one row for MVP
                         }
                         Err(e) => {
-                            return Err(PyErr::new::<pyo3::exceptions::PyIOError, _>(format!("CSV parse error: {}", e)));
+                            return Err(PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
+                                "CSV parse error: {e}"
+                            )));
                         }
                     }
                 }
-                
+
                 if lines.is_empty() {
                     Ok(Vec::<String>::new()) // EOF
                 } else {
@@ -104,19 +111,27 @@ impl Writer {
                     .append(true)
                     .open(&path)
                     .await
-                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(format!("Failed to open file: {}", e)))?;
-                
+                    .map_err(|e| {
+                        PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
+                            "Failed to open file: {e}"
+                        ))
+                    })?;
+
                 // Simple CSV writing for MVP
                 let line = row.join(",") + "\n";
-                file.write_all(line.as_bytes())
-                    .await
-                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(format!("Failed to write file: {}", e)))?;
-                
+                file.write_all(line.as_bytes()).await.map_err(|e| {
+                    PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
+                        "Failed to write file: {e}"
+                    ))
+                })?;
+
                 // Flush to ensure data is written
-                file.flush()
-                    .await
-                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(format!("Failed to flush file: {}", e)))?;
-                
+                file.flush().await.map_err(|e| {
+                    PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
+                        "Failed to flush file: {e}"
+                    ))
+                })?;
+
                 Ok(())
             };
             future_into_py(py, future).map(|awaitable| awaitable.to_object(py))
