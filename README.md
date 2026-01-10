@@ -10,11 +10,13 @@
 
 `rapcsv` provides true async CSV reading and writing for Python, backed by Rust and Tokio. Unlike libraries that wrap blocking I/O in `async` syntax, `rapcsv` guarantees that all CSV operations execute **outside the Python GIL**, ensuring event loops never stall under load, even when processing large files.
 
+**Roadmap Goal**: Achieve drop-in replacement compatibility with `aiocsv`, enabling seamless migration with true async performance. See [ROADMAP.md](https://github.com/eddiethedean/rapcsv/blob/main/ROADMAP.md) for details.
+
 ## Why `rap*`?
 
 Packages prefixed with **`rap`** stand for **Real Async Python**. Unlike many libraries that merely wrap blocking I/O in `async` syntax, `rap*` packages guarantee that all I/O work is executed **outside the Python GIL** using native runtimes (primarily Rust). This means event loops are never stalled by hidden thread pools, blocking syscalls, or cooperative yielding tricks. If a `rap*` API is `async`, it is *structurally non-blocking by design*, not by convention. The `rap` prefix is a contract: measurable concurrency, real parallelism, and verifiable async behavior under load.
 
-See the [rap-manifesto](https://github.com/rap-project/rap-manifesto) for philosophy and guarantees.
+See the [rap-manifesto](https://github.com/eddiethedean/rap-manifesto) for philosophy and guarantees.
 
 ## Features
 
@@ -40,7 +42,7 @@ pip install rapcsv
 ### Building from Source
 
 ```bash
-git clone https://github.com/rap-project/rapcsv.git
+git clone https://github.com/eddiethedean/rapcsv.git
 cd rapcsv
 pip install maturin
 maturin develop
@@ -146,7 +148,7 @@ Write a row to the CSV file.
 
 ## Benchmarks
 
-This package passes the [Fake Async Detector](https://github.com/rap-project/rap-bench). Benchmarks are available in the [rap-bench](https://github.com/rap-project/rap-bench) repository.
+This package passes the [Fake Async Detector](https://github.com/eddiethedean/rap-bench). Benchmarks are available in the [rap-bench](https://github.com/eddiethedean/rap-bench) repository.
 
 Run the detector yourself:
 
@@ -155,23 +157,35 @@ pip install rap-bench
 rap-bench detect rapcsv
 ```
 
+## Roadmap
+
+See [ROADMAP.md](https://github.com/eddiethedean/rapcsv/blob/main/ROADMAP.md) for detailed development plans. Key goals include:
+- Drop-in replacement for `aiocsv` (Phase 1)
+- Full streaming support for large files
+- Comprehensive CSV dialect support
+- Zero-copy optimizations
+
 ## Related Projects
 
-- [rap-manifesto](https://github.com/rap-project/rap-manifesto) - Philosophy and guarantees
-- [rap-bench](https://github.com/rap-project/rap-bench) - Fake Async Detector CLI
-- [rapfiles](https://github.com/rap-project/rapfiles) - True async filesystem I/O
-- [rapsqlite](https://github.com/rap-project/rapsqlite) - True async SQLite
+- [rap-manifesto](https://github.com/eddiethedean/rap-manifesto) - Philosophy and guarantees
+- [rap-bench](https://github.com/eddiethedean/rap-bench) - Fake Async Detector CLI
+- [rapfiles](https://github.com/eddiethedean/rapfiles) - True async filesystem I/O
+- [rapsqlite](https://github.com/eddiethedean/rapsqlite) - True async SQLite
 
-## Limitations
+## Limitations (MVP v0.0.1)
 
-- Not a drop-in replacement for `csv` module
-- Not compatible with all CSV dialects (yet)
+**Current MVP limitations:**
+- Reader reads from start each time (reads entire file on each call)
+- Writer requires separate instances for multiple rows (opens/closes file on each call)
+- Simple CSV implementation (no proper escaping, quoting, or dialect support)
+- Not yet a drop-in replacement for `aiocsv` (goal for Phase 1)
 - Not designed for synchronous use cases
-- MVP limitations: Reader reads from start each time; Writer requires separate instances for multiple rows
+
+**Roadmap**: See [ROADMAP.md](https://github.com/eddiethedean/rapcsv/blob/main/ROADMAP.md) for planned improvements. Our goal is to achieve drop-in replacement compatibility with `aiocsv` while providing true async performance with GIL-independent I/O.
 
 ## Contributing
 
-Contributions are welcome! Please see our [contributing guidelines](https://github.com/rap-project/rapcsv/blob/main/CONTRIBUTING.md) (coming soon).
+Contributions are welcome! Please see our [contributing guidelines](https://github.com/eddiethedean/rapcsv/blob/main/CONTRIBUTING.md) (coming soon).
 
 ## License
 
@@ -179,4 +193,4 @@ MIT
 
 ## Changelog
 
-See [CHANGELOG.md](https://github.com/rap-project/rapcsv/blob/main/CHANGELOG.md) (coming soon) for version history.
+See [CHANGELOG.md](https://github.com/eddiethedean/rapcsv/blob/main/CHANGELOG.md) (coming soon) for version history.
