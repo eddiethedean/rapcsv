@@ -51,7 +51,7 @@ jobs:
     - name: Test package import
       shell: bash
       run: |
-        python -c "import rapcsv; print('Version:', rapcsv.__version__)"
+        cd /tmp && python -c "import rapcsv; print('Version:', rapcsv.__version__)"
 
     - name: Run tests
       shell: bash
