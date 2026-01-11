@@ -44,10 +44,18 @@ jobs:
       shell: bash
       run: pip install target/wheels/rapcsv-*.whl --force-reinstall
 
+    - name: Install test dependencies
+      shell: bash
+      run: pip install pytest pytest-asyncio
+
     - name: Test package import
       shell: bash
       run: |
         python -c "import rapcsv; print('Version:', rapcsv.__version__)"
+
+    - name: Run tests
+      shell: bash
+      run: pytest test_rapcsv.py -v
 
   lint:
     name: Lint
