@@ -3,9 +3,9 @@
 use csv::{ReaderBuilder, WriterBuilder};
 use pyo3::prelude::*;
 use pyo3_async_runtimes::tokio::future_into_py;
+use std::sync::Arc;
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
-use std::sync::Arc;
 use tokio::sync::Mutex;
 
 /// Validate a file path for security and correctness.
