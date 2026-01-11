@@ -4,15 +4,21 @@ This roadmap outlines the development plan for `rapcsv`, aligned with the [RAP P
 
 ## Current Status
 
-**MVP Version (v0.0.1)** - Current limitations:
+**Current Version (v0.0.2)** - Current limitations:
 
-- Reader reads from the start of the file each time (reads entire file on each call)
-- Writer requires separate instances for multiple rows (opens/closes file on each write)
-- Simple CSV implementation (no proper escaping, quoting, or dialect support)
-- No streaming support for large files
-- Limited error handling
+- Reader still reads entire file into memory on each call (streaming improvements planned)
+- No advanced CSV dialect support (delimiters, quote characters, line terminators)
 - No header detection or manipulation
 - Not yet a drop-in replacement for `aiocsv`
+
+**Recent improvements (v0.0.2):**
+- ✅ Security fixes: Upgraded dependencies (pyo3 0.27, pyo3-async-runtimes 0.27), fixed CSV injection vulnerability
+- ✅ Position tracking: Reader now maintains position state across `read_row()` calls
+- ✅ File handle reuse: Writer reuses file handle across multiple `write_row()` calls
+- ✅ CSV escaping: Implemented RFC 4180 compliant CSV escaping and quoting
+- ✅ Input validation: Added path validation (non-empty, no null bytes)
+- ✅ Improved error handling: Enhanced error messages with file path context
+- ✅ Type stubs: Added `.pyi` type stubs for better IDE support and type checking
 
 **Goal**: Achieve drop-in replacement compatibility with `aiocsv` to enable seamless migration with true async performance.
 
@@ -22,29 +28,29 @@ Focus: Remove MVP limitations and establish stable, production-ready core functi
 
 ### Core Improvements
 
-- **Fix Reader position tracking**
-  - Implement proper file cursor management
-  - Stream file reading instead of reading entire file on each call
-  - Maintain position state across `read_row()` calls
-  - Efficient buffering with BufReader
+- **Streaming file reading** (partially complete - position tracking implemented)
+  - ✅ Implement proper file cursor management
+  - ⏳ Stream file reading instead of reading entire file on each call (planned)
+  - ✅ Maintain position state across `read_row()` calls
+  - ⏳ Efficient buffering with BufReader (planned)
 
-- **Enable Writer to write multiple rows**
-  - Maintain file handle across multiple `write_row()` calls
-  - Support append mode properly
-  - Add `close()` or context manager support
-  - Proper file handle lifecycle management
+- **Enable Writer to write multiple rows** (complete)
+  - ✅ Maintain file handle across multiple `write_row()` calls
+  - ⏳ Support append mode properly (planned)
+  - ⏳ Add `close()` or context manager support (planned)
+  - ✅ Proper file handle lifecycle management
 
-- **Proper CSV escaping and quoting**
-  - Implement RFC 4180 compliant CSV writing
-  - Handle special characters (commas, quotes, newlines)
-  - Support quoted fields and escaped quotes
-  - Proper CSV parsing with quoted field handling
+- **Proper CSV escaping and quoting** (complete)
+  - ✅ Implement RFC 4180 compliant CSV writing
+  - ✅ Handle special characters (commas, quotes, newlines)
+  - ✅ Support quoted fields and escaped quotes
+  - ⏳ Proper CSV parsing with quoted field handling (planned)
 
-- **Improved error handling**
-  - Better error messages with context
-  - Proper exception types (CSV-specific errors)
-  - Handle malformed CSV gracefully
-  - File I/O error differentiation
+- **Improved error handling** (complete)
+  - ✅ Better error messages with context
+  - ⏳ Proper exception types (CSV-specific errors) (planned)
+  - ⏳ Handle malformed CSV gracefully (planned)
+  - ✅ File I/O error differentiation
 
 - **API stability improvements**
   - Context manager support (`async with`)

@@ -2,7 +2,8 @@
 
 **Streaming async CSV — no fake async, no GIL stalls.**
 
-[![PyPI version](https://badge.fury.io/py/rapcsv.svg)](https://badge.fury.io/py/rapcsv)
+[![PyPI version](https://img.shields.io/pypi/v/rapcsv.svg)](https://pypi.org/project/rapcsv/)
+[![Downloads](https://pepy.tech/badge/rapcsv)](https://pepy.tech/project/rapcsv)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -76,7 +77,8 @@ import asyncio
 from rapcsv import Writer
 
 async def main():
-    # Write each row with a new Writer instance (MVP limitation)
+    # Write multiple rows with a single Writer instance (file handle reused)
+    writer = Writer("output.csv")
     rows = [
         ["name", "age", "city"],
         ["Alice", "30", "New York"],
@@ -84,7 +86,6 @@ async def main():
     ]
     
     for row in rows:
-        writer = Writer("output.csv")
         await writer.write_row(row)
     
     # Verify file contents
@@ -94,7 +95,7 @@ async def main():
 asyncio.run(main())
 ```
 
-**Note**: In the MVP version, each `write_row` call opens and closes the file. For multiple rows, use separate `Writer` instances. The Reader reads one row at a time from the start of the file (MVP limitation).
+**Note**: The Writer reuses the file handle across multiple `write_row()` calls for efficient writing. The Reader maintains position state across `read_row()` calls.
 
 ## API Reference
 
@@ -120,7 +121,7 @@ Read the next row from the CSV file.
 **Raises:**
 - `IOError`: If the file cannot be read or parsed
 
-**Note**: In MVP version, reads from the start of the file each time.
+**Note**: The Reader maintains position state across `read_row()` calls, reading sequentially through the file.
 
 ### `Writer(path: str)`
 
@@ -144,7 +145,7 @@ Write a row to the CSV file.
 **Raises:**
 - `IOError`: If the file cannot be written
 
-**Note**: In MVP version, each `write_row` call opens and closes the file. Use separate `Writer` instances for multiple rows.
+**Note**: The Writer reuses the file handle across multiple `write_row()` calls for efficient writing. Proper RFC 4180 compliant CSV escaping and quoting is applied automatically.
 
 ## Benchmarks
 
@@ -172,14 +173,23 @@ See [ROADMAP.md](https://github.com/eddiethedean/rapcsv/blob/main/ROADMAP.md) fo
 - [rapfiles](https://github.com/eddiethedean/rapfiles) - True async filesystem I/O
 - [rapsqlite](https://github.com/eddiethedean/rapsqlite) - True async SQLite
 
-## Limitations (MVP v0.0.1)
+## Limitations (v0.0.2)
 
-**Current MVP limitations:**
-- Reader reads from start each time (reads entire file on each call)
-- Writer requires separate instances for multiple rows (opens/closes file on each call)
-- Simple CSV implementation (no proper escaping, quoting, or dialect support)
+**Current limitations:**
+- Reader still reads entire file into memory on each call (streaming improvements planned)
+- No advanced CSV dialect support (delimiters, quote characters, line terminators)
+- No header detection or manipulation
 - Not yet a drop-in replacement for `aiocsv` (goal for Phase 1)
 - Not designed for synchronous use cases
+
+**Recent improvements (v0.0.2):**
+- ✅ Security fixes: Upgraded dependencies (pyo3 0.27, pyo3-async-runtimes 0.27), fixed CSV injection vulnerability
+- ✅ Position tracking: Reader now maintains position state across `read_row()` calls
+- ✅ File handle reuse: Writer reuses file handle across multiple `write_row()` calls
+- ✅ CSV escaping: Implemented RFC 4180 compliant CSV escaping and quoting
+- ✅ Input validation: Added path validation (non-empty, no null bytes)
+- ✅ Improved error handling: Enhanced error messages with file path context
+- ✅ Type stubs: Added `.pyi` type stubs for better IDE support and type checking
 
 **Roadmap**: See [ROADMAP.md](https://github.com/eddiethedean/rapcsv/blob/main/ROADMAP.md) for planned improvements. Our goal is to achieve drop-in replacement compatibility with `aiocsv` while providing true async performance with GIL-independent I/O.
 
