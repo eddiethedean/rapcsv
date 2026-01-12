@@ -115,4 +115,4 @@ test_*.csv
 
 # Local testing artifacts
 test_artifacts/
-LICENSE.tmp
+.LICENSE.backup
