@@ -51,13 +51,15 @@ jobs:
     - name: Test package import
       shell: bash
       run: |
-        python -c "import rapcsv; print('Version:', rapcsv.__version__)"
+        cd /tmp && python -c "import rapcsv; print('Version:', rapcsv.__version__)"
 
     - name: Run tests
       shell: bash
-      env:
-        PYTHONPATH: ""
       run: |
+        # Copy tests and test_data to /tmp to avoid importing from source tree
+        cp -r tests /tmp/
+        cp -r test_data /tmp/
+        cd /tmp
         python -m pytest tests/ -v
 
   lint:
