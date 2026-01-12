@@ -56,9 +56,7 @@ jobs:
     - name: Run tests
       shell: bash
       run: |
-        cp test_rapcsv.py /tmp/
-        cd /tmp
-        python -m pytest test_rapcsv.py -v
+        python -m pytest tests/ -v
 
   lint:
     name: Lint
