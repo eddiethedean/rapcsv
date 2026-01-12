@@ -56,7 +56,7 @@ jobs:
     - name: Run tests
       shell: bash
       run: |
-        python -m pytest tests/ -v
+        cd /tmp && python -m pytest ${{ github.workspace }}/tests/ -v
 
   lint:
     name: Lint
