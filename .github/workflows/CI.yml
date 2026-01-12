@@ -55,10 +55,9 @@ jobs:
 
     - name: Run tests
       shell: bash
+      env:
+        PYTHONPATH: ""
       run: |
-        cp -r tests /tmp/
-        cp -r test_data /tmp/ 2>/dev/null || true
-        cd /tmp
         python -m pytest tests/ -v
 
   lint:
