@@ -57,7 +57,7 @@ jobs:
       shell: bash
       run: |
         cp -r tests /tmp/
-        cp -r test_data /tmp/tests/ 2>/dev/null || true
+        cp -r test_data /tmp/ 2>/dev/null || true
         cd /tmp
         python -m pytest tests/ -v
 
