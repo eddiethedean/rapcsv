@@ -58,7 +58,9 @@ jobs:
       run: |
         # Copy tests and test_data to /tmp to avoid importing from source tree
         cp -r tests /tmp/
-        cp -r test_data /tmp/
+        if [ -d test_data ]; then
+          cp -r test_data /tmp/
+        fi
         cd /tmp
         python -m pytest tests/ -v
 

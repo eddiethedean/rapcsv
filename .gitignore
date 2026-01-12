@@ -112,6 +112,7 @@ dmypy.json
 test_*.csv
 !example.csv
 !examples/
+!test_data/*.csv
 
 # Local testing artifacts
 test_artifacts/
