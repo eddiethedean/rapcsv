@@ -36,7 +36,7 @@ from pathlib import Path
 from rapcsv import Reader, Writer, AsyncReader, AsyncWriter
 
 # Test data paths
-TEST_DATA_DIR = Path(__file__).parent / "test_data"
+TEST_DATA_DIR = Path(__file__).parent.parent / "test_data"
 MATH_CONSTANTS_CSV = str(TEST_DATA_DIR / "math_constants.csv")
 EU_CITIES_CSV = str(TEST_DATA_DIR / "eu_cities_unix.csv")
 METRO_SYSTEMS_TSV = str(TEST_DATA_DIR / "metro_systems.tsv")
