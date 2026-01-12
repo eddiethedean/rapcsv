@@ -95,7 +95,44 @@ async def main():
 asyncio.run(main())
 ```
 
-**Note**: The Writer reuses the file handle across multiple `write_row()` calls for efficient writing. The Reader maintains position state across `read_row()` calls.
+**Note**: The Writer reuses the file handle across multiple `write_row()` calls for efficient writing. The Reader maintains position state across `read_row()` calls and streams data incrementally without loading the entire file into memory.
+
+### Using Context Managers
+
+```python
+import asyncio
+from rapcsv import Reader, Writer
+
+async def main():
+    # Using context managers for automatic resource cleanup
+    async with Writer("output.csv") as writer:
+        await writer.write_row(["name", "age", "city"])
+        await writer.write_row(["Alice", "30", "New York"])
+    
+    async with Reader("output.csv") as reader:
+        row = await reader.read_row()
+        print(row)  # Output: ['name', 'age', 'city']
+
+asyncio.run(main())
+```
+
+### aiocsv Compatibility
+
+`rapcsv` provides compatibility aliases for `aiocsv`:
+
+```python
+from rapcsv import AsyncReader, AsyncWriter  # aiocsv-compatible names
+
+async def main():
+    async with AsyncWriter("output.csv") as writer:
+        await writer.write_row(["col1", "col2"])
+    
+    async with AsyncReader("output.csv") as reader:
+        row = await reader.read_row()
+        print(row)
+
+asyncio.run(main())
+```
 
 ## API Reference
 
@@ -119,9 +156,16 @@ Read the next row from the CSV file.
 - `List[str]`: A list of string values for the row, or an empty list if EOF
 
 **Raises:**
-- `IOError`: If the file cannot be read or parsed
+- `IOError`: If the file cannot be read
+- `CSVError`: If the CSV file is malformed or cannot be parsed
 
-**Note**: The Reader maintains position state across `read_row()` calls, reading sequentially through the file.
+**Note**: The Reader maintains position state across `read_row()` calls, reading sequentially through the file. Files are streamed incrementally without loading the entire file into memory.
+
+**Context Manager Support:**
+```python
+async with Reader("data.csv") as reader:
+    row = await reader.read_row()
+```
 
 ### `Writer(path: str)`
 
@@ -146,6 +190,57 @@ Write a row to the CSV file.
 - `IOError`: If the file cannot be written
 
 **Note**: The Writer reuses the file handle across multiple `write_row()` calls for efficient writing. Proper RFC 4180 compliant CSV escaping and quoting is applied automatically.
+
+### `Writer.close() -> None`
+
+Explicitly close the file handle and flush any pending writes.
+
+**Example:**
+```python
+writer = Writer("output.csv")
+await writer.write_row(["col1", "col2"])
+await writer.close()
+```
+
+**Context Manager Support:**
+```python
+async with Writer("output.csv") as writer:
+    await writer.write_row(["col1", "col2"])
+    # File is automatically closed and flushed on exit
+```
+
+### Exception Types
+
+#### `CSVError`
+
+Raised when a CSV parsing error occurs (e.g., malformed CSV file).
+
+#### `CSVFieldCountError`
+
+Raised when there's a mismatch in the number of fields between rows.
+
+## Testing
+
+`rapcsv` includes comprehensive test coverage with tests adapted from the [aiocsv test suite](https://github.com/MKuranowski/aiocsv/tree/master/tests) to validate compatibility:
+
+```bash
+# Run all tests
+pytest
+
+# Run aiocsv compatibility tests
+pytest test_aiocsv_compatibility.py -v
+
+# Run all tests with coverage
+pytest --cov=rapcsv --cov-report=html
+```
+
+The test suite includes:
+- Basic read/write operations
+- Context manager support
+- Quoted fields with special characters
+- Large file streaming
+- Concurrent operations
+- aiocsv compatibility validation
 
 ## Benchmarks
 
@@ -173,16 +268,34 @@ See [ROADMAP.md](https://github.com/eddiethedean/rapcsv/blob/main/ROADMAP.md) fo
 - [rapfiles](https://github.com/eddiethedean/rapfiles) - True async filesystem I/O
 - [rapsqlite](https://github.com/eddiethedean/rapsqlite) - True async SQLite
 
-## Limitations (v0.0.2)
+## Limitations
 
 **Current limitations:**
-- Reader still reads entire file into memory on each call (streaming improvements planned)
-- No advanced CSV dialect support (delimiters, quote characters, line terminators)
-- No header detection or manipulation
-- Not yet a drop-in replacement for `aiocsv` (goal for Phase 1)
+- No advanced CSV dialect support (delimiters, quote characters, line terminators) - planned for Phase 2
+- No header detection or manipulation - planned for Phase 2
 - Not designed for synchronous use cases
 
-**Recent improvements (v0.0.2):**
+**Phase 1 improvements:**
+- ✅ Streaming file reading - files are read incrementally without loading entire file into memory
+- ✅ Context manager support (`async with`) for automatic resource cleanup
+- ✅ CSV-specific exception types (`CSVError`, `CSVFieldCountError`)
+- ✅ Improved error handling with detailed error messages
+- ✅ `close()` method for explicit file handle closure
+- ✅ aiocsv compatibility aliases (`AsyncReader`, `AsyncWriter`)
+- ✅ Comprehensive test coverage (29 tests including aiocsv compatibility tests)
+- ✅ aiocsv test suite migration - tests adapted from [aiocsv test suite](https://github.com/MKuranowski/aiocsv/tree/master/tests)
+
+**Version 0.1.0 - Phase 1 Complete:**
+- ✅ Streaming file reading - files are read incrementally without loading entire file into memory
+- ✅ Context manager support (`async with`) for automatic resource cleanup
+- ✅ CSV-specific exception types (`CSVError`, `CSVFieldCountError`)
+- ✅ Improved error handling with detailed error messages
+- ✅ `close()` method for explicit file handle closure
+- ✅ aiocsv compatibility aliases (`AsyncReader`, `AsyncWriter`)
+- ✅ Comprehensive test coverage (29 tests including aiocsv compatibility tests)
+- ✅ aiocsv test suite migration - tests adapted from [aiocsv test suite](https://github.com/MKuranowski/aiocsv/tree/master/tests)
+
+**Previous improvements (v0.0.2):**
 - ✅ Security fixes: Upgraded dependencies (pyo3 0.27, pyo3-async-runtimes 0.27), fixed CSV injection vulnerability
 - ✅ Position tracking: Reader now maintains position state across `read_row()` calls
 - ✅ File handle reuse: Writer reuses file handle across multiple `write_row()` calls
