@@ -20,8 +20,8 @@
 
 ### Documentation
 - ✅ **README.md**: Present and up-to-date
-- ✅ **README_TESTING.md**: Present
-- ✅ **ROADMAP.md**: Present and updated for v0.1.0
+- ✅ **docs/README_TESTING.md**: Present
+- ✅ **docs/ROADMAP.md**: Present and updated for v0.1.0
 - ✅ **SECURITY.md**: Present and up-to-date
 - ✅ **LICENSE**: MIT license file present
 

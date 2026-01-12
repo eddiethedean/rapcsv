@@ -11,7 +11,7 @@
 
 `rapcsv` provides true async CSV reading and writing for Python, backed by Rust and Tokio. Unlike libraries that wrap blocking I/O in `async` syntax, `rapcsv` guarantees that all CSV operations execute **outside the Python GIL**, ensuring event loops never stall under load, even when processing large files.
 
-**Roadmap Goal**: Achieve drop-in replacement compatibility with `aiocsv`, enabling seamless migration with true async performance. See [ROADMAP.md](https://github.com/eddiethedean/rapcsv/blob/main/ROADMAP.md) for details.
+**Roadmap Goal**: Achieve drop-in replacement compatibility with `aiocsv`, enabling seamless migration with true async performance. See [docs/ROADMAP.md](https://github.com/eddiethedean/rapcsv/blob/main/docs/ROADMAP.md) for details.
 
 ## Why `rap*`?
 
@@ -255,7 +255,7 @@ rap-bench detect rapcsv
 
 ## Roadmap
 
-See [ROADMAP.md](https://github.com/eddiethedean/rapcsv/blob/main/ROADMAP.md) for detailed development plans. Key goals include:
+See [docs/ROADMAP.md](https://github.com/eddiethedean/rapcsv/blob/main/docs/ROADMAP.md) for detailed development plans. Key goals include:
 - Drop-in replacement for `aiocsv` (Phase 1)
 - Full streaming support for large files
 - Comprehensive CSV dialect support
@@ -304,7 +304,7 @@ See [ROADMAP.md](https://github.com/eddiethedean/rapcsv/blob/main/ROADMAP.md) fo
 - ✅ Improved error handling: Enhanced error messages with file path context
 - ✅ Type stubs: Added `.pyi` type stubs for better IDE support and type checking
 
-**Roadmap**: See [ROADMAP.md](https://github.com/eddiethedean/rapcsv/blob/main/ROADMAP.md) for planned improvements. Our goal is to achieve drop-in replacement compatibility with `aiocsv` while providing true async performance with GIL-independent I/O.
+**Roadmap**: See [docs/ROADMAP.md](https://github.com/eddiethedean/rapcsv/blob/main/docs/ROADMAP.md) for planned improvements. Our goal is to achieve drop-in replacement compatibility with `aiocsv` while providing true async performance with GIL-independent I/O.
 
 ## Contributing
 
