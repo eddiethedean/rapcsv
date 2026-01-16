@@ -1,9 +1,9 @@
 #![allow(non_local_definitions)] // False positive from pyo3 macros
 
 use csv::{ReaderBuilder, WriterBuilder};
+use pyo3::create_exception;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
-use pyo3::create_exception;
 use pyo3_async_runtimes::tokio::future_into_py;
 use std::sync::Arc;
 use tokio::fs::File;
