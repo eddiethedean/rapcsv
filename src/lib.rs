@@ -44,10 +44,12 @@ fn validate_path(path: &str) -> PyResult<()> {
 /// - CSV-specific exception types (CSVError, CSVFieldCountError)
 /// - RFC 4180 compliant CSV parsing and writing
 #[pymodule]
-fn _rapcsv(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _rapcsv(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Reader>()?;
     m.add_class::<Writer>()?;
-    // Exception classes are automatically registered by create_exception! macro
+    // Register exception classes (required for create_exception! to be accessible from Python)
+    m.add("CSVError", py.get_type::<CSVError>())?;
+    m.add("CSVFieldCountError", py.get_type::<CSVFieldCountError>())?;
     Ok(())
 }
 
