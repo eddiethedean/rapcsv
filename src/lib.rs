@@ -3,11 +3,16 @@
 use csv::{ReaderBuilder, WriterBuilder};
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
+use pyo3::create_exception;
 use pyo3_async_runtimes::tokio::future_into_py;
 use std::sync::Arc;
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::Mutex;
+
+// Exception classes (ABI3 compatible)
+create_exception!(_rapcsv, CSVError, PyException);
+create_exception!(_rapcsv, CSVFieldCountError, PyException);
 
 /// Validate a file path for security and correctness.
 fn validate_path(path: &str) -> PyResult<()> {
@@ -22,63 +27,6 @@ fn validate_path(path: &str) -> PyResult<()> {
         ));
     }
     Ok(())
-}
-
-/// CSV parsing error.
-///
-/// Raised when a CSV parsing error occurs, such as a malformed CSV file
-/// or incomplete records. Provides detailed error messages with file path
-/// and row context.
-///
-/// # Example
-///
-/// ```python
-/// from rapcsv import Reader, CSVError
-///
-/// try:
-///     reader = Reader("malformed.csv")
-///     row = await reader.read_row()
-/// except CSVError as e:
-///     print(f"CSV parse error: {e}")
-/// ```
-#[pyclass(extends=PyException)]
-#[derive(Debug)]
-struct CSVError {
-    message: String,
-}
-
-#[pymethods]
-impl CSVError {
-    #[new]
-    fn new(message: String) -> Self {
-        CSVError { message }
-    }
-
-    fn __str__(&self) -> String {
-        self.message.clone()
-    }
-}
-
-/// CSV field count mismatch error.
-///
-/// Raised when there's a mismatch in the number of fields between rows
-/// in a CSV file. This typically indicates a malformed CSV file.
-#[pyclass(extends=PyException)]
-#[derive(Debug)]
-struct CSVFieldCountError {
-    message: String,
-}
-
-#[pymethods]
-impl CSVFieldCountError {
-    #[new]
-    fn new(message: String) -> Self {
-        CSVFieldCountError { message }
-    }
-
-    fn __str__(&self) -> String {
-        self.message.clone()
-    }
 }
 
 /// Python bindings for rapcsv - Streaming async CSV.
@@ -99,8 +47,7 @@ impl CSVFieldCountError {
 fn _rapcsv(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Reader>()?;
     m.add_class::<Writer>()?;
-    m.add_class::<CSVError>()?;
-    m.add_class::<CSVFieldCountError>()?;
+    // Exception classes are automatically registered by create_exception! macro
     Ok(())
 }
 
@@ -303,7 +250,7 @@ impl Reader {
                                         The CSV file may be malformed or have incomplete records.",
                                         current_pos, path, e
                                     );
-                                    return Err(PyErr::new::<CSVError, _>(error_msg));
+                                    return Err(CSVError::new_err(error_msg));
                                 }
                                 None => {
                                     return Ok(Vec::<String>::new()); // EOF
