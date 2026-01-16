@@ -31,7 +31,7 @@ See the [rap-manifesto](https://github.com/eddiethedean/rap-manifesto) for philo
 
 ## Requirements
 
-- Python 3.8+
+- Python 3.8+ (including Python 3.13)
 - Rust 1.70+ (for building from source)
 
 ## Installation
@@ -285,6 +285,25 @@ See [docs/ROADMAP.md](https://github.com/eddiethedean/rapcsv/blob/main/docs/ROAD
 - ✅ Comprehensive test coverage (29 tests including aiocsv compatibility tests)
 - ✅ aiocsv test suite migration - tests adapted from [aiocsv test suite](https://github.com/MKuranowski/aiocsv/tree/master/tests)
 
+## Changelog
+
+### v0.1.1 (2026-01-16)
+
+**Python 3.13 Support:**
+- ✅ Added Python 3.13 support with ABI3 forward compatibility
+- ✅ Updated CI/CD workflows to test and build for Python 3.13
+- ✅ Fixed exception handling for ABI3 compatibility (using `create_exception!` macro)
+- ✅ Explicitly registered exception classes in Python module
+
+**Bug Fixes:**
+- Fixed exception registration issue where exceptions created with `create_exception!` were not accessible from Python
+
+**Compatibility:**
+- Python 3.8 through 3.13 supported
+- All platforms: Ubuntu (x86-64, aarch64), macOS (aarch64, x86-64), Windows (x86-64, aarch64)
+
+### v0.1.0 (2025-01-12)
+
 **Version 0.1.0 - Phase 1 Complete:**
 - ✅ Streaming file reading - files are read incrementally without loading entire file into memory
 - ✅ Context manager support (`async with`) for automatic resource cleanup
@@ -314,6 +333,3 @@ Contributions are welcome! Please see our [contributing guidelines](https://gith
 
 MIT
 
-## Changelog
-
-See [CHANGELOG.md](https://github.com/eddiethedean/rapcsv/blob/main/CHANGELOG.md) (coming soon) for version history.

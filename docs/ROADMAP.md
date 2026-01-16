@@ -4,11 +4,11 @@ This roadmap outlines the development plan for `rapcsv`, aligned with the [RAP P
 
 ## Current Status
 
-**Current Version (v0.1.0)** - Phase 1 Complete ✅
+**Current Version (v0.1.1)** - Phase 1 Complete ✅
 
 Phase 1 has been successfully completed! All core improvements have been implemented, tested, and validated. rapcsv now provides a solid foundation for async CSV operations with true GIL-independent I/O.
 
-### Phase 1 Achievements (v0.1.0)
+### Phase 1 Achievements (v0.1.0 - v0.1.1)
 
 **Core Functionality:**
 - ✅ Streaming file reading - incremental reading without loading entire file into memory
@@ -182,8 +182,8 @@ Focus: Feature additions, performance enhancements, and broader compatibility.
   - Optional compatibility layer with Python's standard `csv` module API
   - Migration guides for existing code from aiocsv and csv module
   - Backwards compatibility maintenance across versions
-  - Python 3.13 support (wheels and CI builds) - currently excluded due to PyO3/maturin compatibility issues
-  - Python 3.14 support (wheels and CI builds)
+  - ✅ Python 3.13 support (wheels and CI builds) - complete in v0.1.1
+  - ⏳ Python 3.14 support (wheels and CI builds) - planned for future release
 
 ## Phase 3 — Ecosystem
 
