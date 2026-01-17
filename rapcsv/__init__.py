@@ -47,7 +47,7 @@ except ImportError:
 AsyncReader = Reader
 AsyncWriter = Writer
 
-__version__: str = "0.1.1"
+__version__: str = "0.1.2"
 __all__: List[str] = [
     "Reader",
     "Writer",

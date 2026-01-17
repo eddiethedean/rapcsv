@@ -183,7 +183,7 @@ Focus: Feature additions, performance enhancements, and broader compatibility.
   - Migration guides for existing code from aiocsv and csv module
   - Backwards compatibility maintenance across versions
   - ✅ Python 3.13 support (wheels and CI builds) - complete in v0.1.1
-  - ⏳ Python 3.14 support (wheels and CI builds) - planned for future release
+  - ✅ Python 3.14 support (wheels and CI builds) - complete
 
 ## Phase 3 — Ecosystem
 
