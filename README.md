@@ -97,6 +97,31 @@ asyncio.run(main())
 
 **Note**: The Writer reuses the file handle across multiple `write_row()` calls for efficient writing. The Reader maintains position state across `read_row()` calls and streams data incrementally without loading the entire file into memory.
 
+### Writing Multiple Rows Efficiently
+
+```python
+import asyncio
+from rapcsv import Writer
+
+async def main():
+    writer = Writer("output.csv")
+    
+    # Use writerows() for batch writing (more efficient)
+    rows = [
+        ["name", "age", "city"],
+        ["Alice", "30", "New York"],
+        ["Bob", "25", "London"],
+    ]
+    await writer.writerows(rows)
+    
+    # Or use async for iteration
+    async with Writer("output.csv") as writer:
+        async for row in rows:
+            await writer.write_row(row)
+
+asyncio.run(main())
+```
+
 ### Using Context Managers
 
 ```python
@@ -134,18 +159,98 @@ async def main():
 asyncio.run(main())
 ```
 
+### Using Async File-Like Objects
+
+`rapcsv` supports async file-like objects from `aiofiles` and `rapfiles`, enabling seamless integration with other async file I/O libraries:
+
+#### With aiofiles
+
+```python
+import asyncio
+import aiofiles
+from rapcsv import Reader, Writer
+
+async def main():
+    # Reading with aiofiles
+    async with aiofiles.open("data.csv", mode="r") as f:
+        reader = Reader(f)
+        row = await reader.read_row()
+        print(row)
+    
+    # Writing with aiofiles
+    async with aiofiles.open("output.csv", mode="w") as f:
+        writer = Writer(f)
+        await writer.write_row(["name", "age", "city"])
+        await writer.write_row(["Alice", "30", "NYC"])
+
+asyncio.run(main())
+```
+
+#### With rapfiles
+
+```python
+import asyncio
+import rapfiles
+from rapcsv import Reader, Writer
+
+async def main():
+    # Reading with rapfiles
+    async with rapfiles.open("data.csv", mode="r") as f:
+        reader = Reader(f)
+        row = await reader.read_row()
+        print(row)
+    
+    # Writing with rapfiles
+    async with rapfiles.open("output.csv", mode="w") as f:
+        writer = Writer(f)
+        await writer.write_row(["name", "age"])
+        await writer.write_row(["Bob", "25"])
+
+asyncio.run(main())
+```
+
+#### With AsyncDictReader and AsyncDictWriter
+
+```python
+import asyncio
+import aiofiles
+from rapcsv import AsyncDictReader, AsyncDictWriter
+
+async def main():
+    # Writing dictionaries with aiofiles
+    async with aiofiles.open("output.csv", mode="w") as f:
+        writer = AsyncDictWriter(f, fieldnames=["name", "age", "city"])
+        await writer.writeheader()
+        await writer.writerow({"name": "Alice", "age": "30", "city": "NYC"})
+    
+    # Reading dictionaries with aiofiles
+    async with aiofiles.open("output.csv", mode="r") as f:
+        reader = AsyncDictReader(f)
+        row = await reader.read_row()
+        print(row)  # Output: {'name': 'Alice', 'age': '30', 'city': 'NYC'}
+
+asyncio.run(main())
+```
+
+**Note**: File handles are automatically detected. You can pass either a file path (string) or an async file-like object to `Reader`, `Writer`, `AsyncDictReader`, and `AsyncDictWriter`. The library will use the appropriate I/O method automatically.
+
 ## API Reference
 
-### `Reader(path: str)`
+### `Reader(path_or_handle: str | file-like)`
 
 Create a new async CSV reader.
 
 **Parameters:**
-- `path` (str): Path to the CSV file to read
+- `path_or_handle` (str | file-like): Path to the CSV file to read, or an async file-like object (e.g., from `aiofiles` or `rapfiles`)
 
 **Example:**
 ```python
+# With file path
 reader = Reader("data.csv")
+
+# With async file handle
+async with aiofiles.open("data.csv", mode="r") as f:
+    reader = Reader(f)
 ```
 
 ### `Reader.read_row() -> List[str]`
@@ -167,16 +272,21 @@ async with Reader("data.csv") as reader:
     row = await reader.read_row()
 ```
 
-### `Writer(path: str)`
+### `Writer(path_or_handle: str | file-like)`
 
 Create a new async CSV writer.
 
 **Parameters:**
-- `path` (str): Path to the CSV file to write
+- `path_or_handle` (str | file-like): Path to the CSV file to write, or an async file-like object (e.g., from `aiofiles` or `rapfiles`)
 
 **Example:**
 ```python
+# With file path
 writer = Writer("output.csv")
+
+# With async file handle
+async with aiofiles.open("output.csv", mode="w") as f:
+    writer = Writer(f)
 ```
 
 ### `Writer.write_row(row: List[str]) -> None`
@@ -190,6 +300,35 @@ Write a row to the CSV file.
 - `IOError`: If the file cannot be written
 
 **Note**: The Writer reuses the file handle across multiple `write_row()` calls for efficient writing. Proper RFC 4180 compliant CSV escaping and quoting is applied automatically.
+
+### `Writer.write_row(row: List[str]) -> None`
+
+Write a row to the CSV file.
+
+**Parameters:**
+- `row` (List[str]): A list of string values to write as a CSV row
+
+**Raises:**
+- `IOError`: If the file cannot be written
+
+**Note**: The Writer reuses the file handle across multiple `write_row()` calls for efficient writing. Proper RFC 4180 compliant CSV escaping and quoting is applied automatically.
+
+### `Writer.writerows(rows: List[List[str]]) -> None`
+
+Write multiple rows to the CSV file efficiently.
+
+**Parameters:**
+- `rows` (List[List[str]]): A list of rows, where each row is a list of string values
+
+**Example:**
+```python
+writer = Writer("output.csv")
+await writer.writerows([
+    ["name", "age"],
+    ["Alice", "30"],
+    ["Bob", "25"],
+])
+```
 
 ### `Writer.close() -> None`
 
@@ -271,8 +410,8 @@ See [docs/ROADMAP.md](https://github.com/eddiethedean/rapcsv/blob/main/docs/ROAD
 ## Limitations
 
 **Current limitations:**
-- No advanced CSV dialect support (delimiters, quote characters, line terminators) - planned for Phase 2
-- No header detection or manipulation - planned for Phase 2
+- File handle support (aiofiles/rapfiles integration) - partially implemented (structure in place, full bridging deferred)
+- DictReader/DictWriter dict conversion - structure implemented, some methods need async/GIL refinement
 - Not designed for synchronous use cases
 
 **Phase 1 improvements:**
