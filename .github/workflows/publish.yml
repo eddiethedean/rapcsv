@@ -190,6 +190,28 @@ jobs:
             mv .LICENSE.backup LICENSE
           fi
 
+      - name: Test built wheel (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          # Install the built wheel
+          pip install dist/*.whl --force-reinstall
+          
+          # Install test dependencies
+          pip install -e ".[test]"
+          
+          # Create a temporary directory (works on all platforms)
+          TEST_DIR=$(mktemp -d 2>/dev/null || mktemp -d -t 'rapcsv-test')
+          # Copy tests and test_data to temp dir to avoid importing from source tree
+          cp -r tests "$TEST_DIR/"
+          if [ -d test_data ]; then
+            cp -r test_data "$TEST_DIR/"
+          fi
+          # Copy pyproject.toml so pytest can read asyncio_mode configuration
+          cp pyproject.toml "$TEST_DIR/"
+          cd "$TEST_DIR"
+          python -m pytest tests/ -v
+
       - name: Set up Python ${{ matrix.python }} (macOS/Windows)
         if: matrix.os != 'ubuntu-latest'
         uses: actions/setup-python@v5
@@ -221,6 +243,49 @@ jobs:
           if [ -f .LICENSE.backup ]; then
             mv .LICENSE.backup LICENSE
           fi
+
+      - name: Test built wheel (macOS/Windows)
+        if: matrix.os != 'ubuntu-latest'
+        shell: bash
+        run: |
+          # Install the built wheel
+          pip install dist/*.whl --force-reinstall
+          
+          # Install test dependencies
+          pip install -e ".[test]"
+          
+          # Create a temporary directory (works on all platforms)
+          TEST_DIR=$(mktemp -d 2>/dev/null || mktemp -d -t 'rapcsv-test')
+          # Copy tests and test_data to temp dir to avoid importing from source tree
+          cp -r tests "$TEST_DIR/"
+          if [ -d test_data ]; then
+            cp -r test_data "$TEST_DIR/"
+          fi
+          # Copy pyproject.toml so pytest can read asyncio_mode configuration
+          cp pyproject.toml "$TEST_DIR/"
+          cd "$TEST_DIR"
+          python -m pytest tests/ -v
+
+      - name: Test built wheel
+        shell: bash
+        run: |
+          # Install the built wheel
+          pip install dist/*.whl --force-reinstall
+          
+          # Install test dependencies
+          pip install -e ".[test]"
+          
+          # Create a temporary directory (works on all platforms)
+          TEST_DIR=$(mktemp -d 2>/dev/null || mktemp -d -t 'rapcsv-test')
+          # Copy tests and test_data to temp dir to avoid importing from source tree
+          cp -r tests "$TEST_DIR/"
+          if [ -d test_data ]; then
+            cp -r test_data "$TEST_DIR/"
+          fi
+          # Copy pyproject.toml so pytest can read asyncio_mode configuration
+          cp pyproject.toml "$TEST_DIR/"
+          cd "$TEST_DIR"
+          python -m pytest tests/ -v
 
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
@@ -272,83 +337,9 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  test:
-    name: Run tests before publishing (${{ matrix.os }} / py${{ matrix.python-version }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Test on each major platform with representative Python versions
-          - os: ubuntu-latest
-            python-version: '3.8'
-          - os: ubuntu-latest
-            python-version: '3.11'
-          - os: ubuntu-latest
-            python-version: '3.13'
-          - os: ubuntu-latest
-            python-version: '3.14'
-          - os: macos-latest
-            python-version: '3.8'
-          - os: macos-latest
-            python-version: '3.11'
-          - os: macos-latest
-            python-version: '3.13'
-          - os: windows-latest
-            python-version: '3.8'
-          - os: windows-latest
-            python-version: '3.11'
-          - os: windows-latest
-            python-version: '3.13'
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install maturin
-        run: pip install maturin
-
-      - name: Build package (Linux)
-        if: runner.os == 'Linux'
-        run: python -m maturin build --release --skip-auditwheel
-
-      - name: Build package (macOS/Windows)
-        if: runner.os != 'Linux'
-        run: python -m maturin build --release
-
-      - name: Install package
-        shell: bash
-        run: pip install target/wheels/rapcsv-*.whl --force-reinstall
-
-      - name: Install test dependencies
-        shell: bash
-        run: pip install -e ".[test]"
-
-      - name: Run tests
-        shell: bash
-        run: |
-          # Create a temporary directory (works on all platforms)
-          TEST_DIR=$(mktemp -d 2>/dev/null || mktemp -d -t 'rapcsv-test')
-          # Copy tests and test_data to temp dir to avoid importing from source tree
-          cp -r tests "$TEST_DIR/"
-          if [ -d test_data ]; then
-            cp -r test_data "$TEST_DIR/"
-          fi
-          # Copy pyproject.toml so pytest can read asyncio_mode configuration
-          cp pyproject.toml "$TEST_DIR/"
-          cd "$TEST_DIR"
-          python -m pytest tests/ -v
-
   publish:
     name: Publish to PyPI
-    needs: [test, build-wheels, build-sdist]
+    needs: [build-wheels, build-sdist]
     runs-on: ubuntu-latest
     permissions:
       contents: read
