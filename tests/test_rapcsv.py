@@ -1,11 +1,10 @@
 """Test rapcsv async functionality."""
 
-import os
-import tempfile
-
 import pytest
+import tempfile
+import os
 
-from rapcsv import AsyncReader, AsyncWriter, Reader, Writer
+from rapcsv import Reader, Writer, AsyncReader, AsyncWriter
 
 
 @pytest.mark.asyncio
@@ -22,7 +21,7 @@ async def test_write_row():
         assert os.path.exists(test_file), "CSV file should exist"
 
         # Verify content
-        with open(test_file) as f:
+        with open(test_file, "r") as f:
             content = f.read()
         assert "col1" in content
         assert "col2" in content
@@ -45,7 +44,7 @@ async def test_write_multiple_rows():
         await writer.write_row(["Bob", "25", "London"])
 
         # Verify content
-        with open(test_file) as f:
+        with open(test_file, "r") as f:
             lines = f.readlines()
         assert len(lines) >= 3, "Should have at least 3 rows"
     finally:
@@ -66,7 +65,9 @@ async def test_read_row():
         reader = Reader(test_file)
         row = await reader.read_row()
         assert len(row) == 3, f"Expected 3 columns, got {len(row)}"
-        assert row == ["col1", "col2", "col3"], f"Expected ['col1', 'col2', 'col3'], got {row}"
+        assert row == ["col1", "col2", "col3"], (
+            f"Expected ['col1', 'col2', 'col3'], got {row}"
+        )
     finally:
         if os.path.exists(test_file):
             os.unlink(test_file)
@@ -130,12 +131,14 @@ async def test_csv_escaping():
     try:
         writer = Writer(test_file)
         # Test comma, quote, and newline in data
-        await writer.write_row(["value,with,commas", 'value"with"quotes', "value\nwith\nnewlines"])
+        await writer.write_row(
+            ["value,with,commas", 'value"with"quotes', "value\nwith\nnewlines"]
+        )
 
         reader = Reader(test_file)
         row = await reader.read_row()
         assert len(row) == 3, f"Expected 3 columns, got {len(row)}"
-        assert "value,with,commas" in row[0] or row[0] == "value,with,commas"
+        assert "value,with,commas" in row[0] or "value,with,commas" == row[0]
     finally:
         if os.path.exists(test_file):
             os.unlink(test_file)
@@ -170,7 +173,7 @@ async def test_context_manager_writer():
             await writer.write_row(["val1", "val2"])
 
         # Verify file was written
-        with open(test_file) as f:
+        with open(test_file, "r") as f:
             content = f.read()
             assert "col1" in content
             assert "val1" in content
@@ -191,7 +194,7 @@ async def test_writer_close():
         await writer.close()
 
         # Verify file was written
-        with open(test_file) as f:
+        with open(test_file, "r") as f:
             content = f.read()
             assert "col1" in content
     finally:
@@ -227,7 +230,7 @@ async def test_quoted_fields_with_newlines():
 
     try:
         writer = Writer(test_file)
-        await writer.write_row(["normal", "value\nwith\nnewlines", "another"])
+        await writer.write_row(["normal", 'value\nwith\nnewlines', "another"])
 
         reader = Reader(test_file)
         row = await reader.read_row()
@@ -304,7 +307,7 @@ async def test_aiocsv_compatibility_async_writer():
         writer = AsyncWriter(test_file)
         await writer.write_row(["col1", "col2"])
 
-        with open(test_file) as f:
+        with open(test_file, "r") as f:
             content = f.read()
             assert "col1" in content
     finally:
@@ -351,7 +354,7 @@ async def test_concurrent_operations():
 
         async def write_rows(writer, start, count):
             for i in range(count):
-                await writer.write_row([f"row{start + i}", "col2"])
+                await writer.write_row([f"row{start+i}", "col2"])
 
         writer = Writer(test_file)
         await asyncio.gather(

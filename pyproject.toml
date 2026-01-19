@@ -33,8 +33,6 @@ Documentation = "https://rapcsv.readthedocs.io/"
 Repository = "https://github.com/eddiethedean/rapcsv"
 Issues = "https://github.com/eddiethedean/rapcsv/issues"
 
-dependencies = []
-
 [project.optional-dependencies]
 test = [
     "pytest>=7.0",
