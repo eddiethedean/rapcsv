@@ -272,27 +272,6 @@ jobs:
           cd "$TEST_DIR"
           python -m pytest tests/ -v
 
-      - name: Test built wheel
-        shell: bash
-        run: |
-          # Install the built wheel
-          pip install dist/*.whl --force-reinstall
-          
-          # Install test dependencies
-          pip install -e ".[test]"
-          
-          # Create a temporary directory (works on all platforms)
-          TEST_DIR=$(mktemp -d 2>/dev/null || mktemp -d -t 'rapcsv-test')
-          # Copy tests and test_data to temp dir to avoid importing from source tree
-          cp -r tests "$TEST_DIR/"
-          if [ -d test_data ]; then
-            cp -r test_data "$TEST_DIR/"
-          fi
-          # Copy pyproject.toml so pytest can read asyncio_mode configuration
-          cp pyproject.toml "$TEST_DIR/"
-          cd "$TEST_DIR"
-          python -m pytest tests/ -v
-
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
         with:
