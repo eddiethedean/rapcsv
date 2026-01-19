@@ -196,8 +196,8 @@ jobs:
             mv .LICENSE.backup LICENSE
           fi
 
-      - name: Test built wheel (Linux)
-        if: matrix.os == 'ubuntu-latest'
+      - name: Test built wheel (Linux x86-64)
+        if: matrix.os == 'ubuntu-latest' && matrix.architecture == 'x86-64'
         shell: bash
         run: |
           # Install the built wheel
@@ -217,6 +217,11 @@ jobs:
           cp pyproject.toml "$TEST_DIR/"
           cd "$TEST_DIR"
           python -m pytest tests/ -v
+          
+          # Note: aarch64 Linux builds are not tested because ARM64 wheels cannot
+          # be executed on x86-64 GitHub Actions runners. The wheels are built
+          # successfully in Docker with QEMU emulation, but cannot be tested on
+          # the host runner.
 
       - name: Set up Python ${{ matrix.python }} (macOS/Windows)
         if: matrix.os != 'ubuntu-latest'
