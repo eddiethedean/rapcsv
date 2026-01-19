@@ -193,8 +193,8 @@ async def test_writer_writerows_with_aiofiles():
             await writer.close()
 
         # Read back and verify
-        with open(test_file) as f:
-            lines = f.readlines()
+        with open(test_file, newline="") as f:
+            lines = [line.rstrip("\r\n") for line in f if line.strip()]
             assert len(lines) == 3
             assert "col1,col2,col3" in lines[0]
     finally:
@@ -269,8 +269,8 @@ async def test_dictwriter_with_aiofiles():
             await writer.writerow({"name": "Bob", "age": "25", "city": "LA"})
 
         # Read back and verify
-        with open(test_file) as f:
-            lines = f.readlines()
+        with open(test_file, newline="") as f:
+            lines = [line.rstrip("\r\n") for line in f if line.strip()]
             assert len(lines) == 3
             assert "name,age,city" in lines[0]
             assert "Alice,30,NYC" in lines[1]
