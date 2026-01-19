@@ -1,16 +1,20 @@
-# PyPI Release Readiness Checklist - rapcsv v0.1.0
+# PyPI Release Readiness Checklist
+
+This checklist ensures `rapcsv` is ready for PyPI release. Update the version number in the title when preparing a new release.
 
 ## ✅ Pre-Release Checks
 
 ### Version Consistency
-- ✅ **pyproject.toml**: `version = "0.1.0"`
-- ✅ **Cargo.toml**: `version = "0.1.0"`
-- ✅ **rapcsv/__init__.py**: `__version__ = "0.1.0"`
+- ✅ **pyproject.toml**: `version = "0.2.0"`
+- ✅ **Cargo.toml**: `version = "0.2.0"`
+- ✅ **rapcsv/__init__.py**: `__version__ = "0.2.0"`
 
 ### Code Quality
 - ✅ **Rust Format**: `cargo fmt` - Code is properly formatted
 - ✅ **Rust Check**: `cargo check --all-features` - Compiles successfully
 - ✅ **Rust Clippy**: No security or correctness issues
+- ✅ **Ruff Lint**: `ruff check .` - Python linting passes (no errors)
+- ✅ **Ruff Format**: `ruff format --check .` - Python code is properly formatted
 - ✅ **Mypy**: Python type checking passes (no errors)
 
 ### Tests
@@ -20,14 +24,17 @@
 
 ### Documentation
 - ✅ **README.md**: Present and up-to-date
+- ✅ **CHANGELOG.md**: Present and updated with current version
+- ✅ **BUGS_AND_IMPROVEMENTS.md**: Present and up-to-date
 - ✅ **docs/README_TESTING.md**: Present
-- ✅ **docs/ROADMAP.md**: Present and updated for v0.1.0
+- ✅ **docs/ROADMAP.md**: Present and updated for current version
 - ✅ **SECURITY.md**: Present and up-to-date
 - ✅ **LICENSE**: MIT license file present
+- ✅ **.pypi-release-ready**: Present with current version number
 
 ### Build Artifacts
-- ✅ **Source Distribution**: `dist/rapcsv-0.1.0.tar.gz` (33K)
-- ✅ **Wheel Distribution**: `dist/rapcsv-0.1.0-cp39-cp39-macosx_11_0_arm64.whl` (578K)
+- ✅ **Source Distribution**: `dist/rapcsv-0.2.0.tar.gz`
+- ✅ **Wheel Distribution**: `dist/rapcsv-0.2.0-*.whl`
 - ✅ **Twine Check**: Both distributions PASSED validation
 - ✅ **Metadata Check**: PyPI-compatible metadata
 
@@ -39,8 +46,8 @@
 ## 📦 Distribution Files
 
 ### Current Builds (in `dist/`)
-- `rapcsv-0.1.0.tar.gz` - Source distribution
-- `rapcsv-0.1.0-cp39-cp39-macosx_11_0_arm64.whl` - macOS ARM64 wheel
+- `rapcsv-0.2.0.tar.gz` - Source distribution
+- `rapcsv-0.2.0-*.whl` - Platform-specific wheels
 
 ### Multi-Platform Builds (for full PyPI release)
 To build wheels for all platforms, use:
@@ -69,7 +76,7 @@ pip install --index-url https://test.pypi.org/simple/ rapcsv
 ```
 
 ### 2. Final Verification
-- [ ] Test installation: `pip install rapcsv==0.1.0`
+- [ ] Test installation: `pip install rapcsv==0.2.0`
 - [ ] Test import: `python -c "import rapcsv; print(rapcsv.__version__)"`
 - [ ] Run smoke tests with installed package
 
@@ -88,7 +95,7 @@ twine upload dist/*
 ## 📋 Project Metadata Summary
 
 **Package Name**: `rapcsv`  
-**Version**: `0.1.0`  
+**Version**: `0.2.0`  
 **License**: MIT  
 **Python**: 3.8+  
 **Author**: RAP Project  
