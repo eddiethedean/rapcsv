@@ -36,7 +36,7 @@ Issues = "https://github.com/eddiethedean/rapcsv/issues"
 [project.optional-dependencies]
 test = [
     "pytest>=7.0",
-    "pytest-asyncio>=0.21.0",
+    "pytest-asyncio>=0.23.8",  # 0.23.8+ required for Python 3.13 support
     "pytest-timeout>=2.0",
     "aiocsv>=0.3.0",  # Optional, for parity tests
     "aiofiles>=23.0",  # Optional, for aiocsv parity tests
