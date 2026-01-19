@@ -2799,7 +2799,7 @@ impl Writer {
                                     "File handle not available"
                                 )
                             })?;
-                            
+
                             let loop_guard = event_loop_clone.lock().map_err(|_| {
                                 PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
                                     "Failed to lock event loop"
@@ -2810,7 +2810,7 @@ impl Writer {
                                     "Event loop not available. This should not happen - file handles require an event loop during construction."
                                 )
                             })?;
-                            
+
                             Ok((handle.clone_ref(py), loop_ref.clone_ref(py)))
                         })
                     })
