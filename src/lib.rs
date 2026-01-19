@@ -234,6 +234,9 @@ impl DialectConfig {
             Some(1) => QuoteStyle::Necessary,    // QUOTE_MINIMAL
             Some(2) => QuoteStyle::Always,       // QUOTE_ALL
             Some(3) => QuoteStyle::NonNumeric,   // QUOTE_NONNUMERIC
+            Some(4) => QuoteStyle::Always,       // QUOTE_NOTNULL - map to Always (quote all non-null fields)
+            Some(5) => QuoteStyle::Always,       // Reserved for future use
+            Some(6) => QuoteStyle::NonNumeric,   // QUOTE_STRINGS - map to NonNumeric (quote string fields)
             _ => QuoteStyle::Necessary,          // Default to QUOTE_MINIMAL
         };
 
@@ -260,7 +263,7 @@ impl DialectConfig {
     }
 
     /// Apply dialect config to a ReaderBuilder.
-    fn apply_to_reader(&self, builder: &mut ReaderBuilder) {
+    fn apply_to_reader(&self, builder: &mut ReaderBuilder, field_size_limit: Option<usize>) {
         builder
             .delimiter(self.delimiter)
             .quote(self.quotechar)
@@ -276,6 +279,16 @@ impl DialectConfig {
 
         if self.skipinitialspace {
             // csv crate handles whitespace trimming automatically
+        }
+
+        // Apply field size limit if specified
+        // Note: csv crate doesn't have direct field_size_limit, but we can use buffer_capacity
+        // as a workaround, though it's not exactly the same. For true field size limiting,
+        // we'd need to check field sizes manually after reading.
+        if let Some(limit) = field_size_limit {
+            // Set buffer capacity to at least the field size limit
+            // This helps prevent reading extremely large fields
+            builder.buffer_capacity(limit.max(8192));
         }
     }
 
@@ -380,7 +393,7 @@ impl Reader {
     /// * `delimiter` - Field delimiter (default: ',')
     /// * `quotechar` - Quote character (default: '"')
     /// * `escapechar` - Escape character (default: None)
-    /// * `quoting` - Quoting style: 0=QUOTE_NONE, 1=QUOTE_MINIMAL, 2=QUOTE_ALL, 3=QUOTE_NONNUMERIC
+    /// * `quoting` - Quoting style: 0=QUOTE_NONE, 1=QUOTE_MINIMAL, 2=QUOTE_ALL, 3=QUOTE_NONNUMERIC, 4=QUOTE_NOTNULL, 6=QUOTE_STRINGS
     /// * `lineterminator` - Line terminator (default: '\r\n')
     /// * `skipinitialspace` - Skip whitespace after delimiter (default: false)
     /// * `strict` - Strict mode for field count validation (default: false)
@@ -477,7 +490,7 @@ impl Reader {
     /// Get the current line number (1-based).
     #[getter]
     fn line_num(&self) -> PyResult<usize> {
-        Python::attach(|py| {
+        Python::attach(|_py| {
             Ok(*self.line_num.try_lock()
                 .map_err(|_| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
                     "Cannot access line_num concurrently"
@@ -498,6 +511,7 @@ impl Reader {
         let line_num = Arc::clone(&self_.line_num);
         let dialect = self_.dialect.clone();
         let chunk_size = self_.read_size;
+        let field_size_limit = self_.field_size_limit;
         Python::attach(|py| {
             // For file handles, we'll extract and clone in async block where we can lock
             // But we can't easily clone Py<PyAny> without GIL in async
@@ -528,7 +542,7 @@ impl Reader {
                     if !available_data.is_empty() {
                         let mut csv_reader_builder = ReaderBuilder::new();
                         csv_reader_builder.has_headers(false);
-                        dialect.apply_to_reader(&mut csv_reader_builder);
+                        dialect.apply_to_reader(&mut csv_reader_builder, field_size_limit);
                         let mut csv_reader = csv_reader_builder.from_reader(available_data.as_bytes());
 
                         // available_data starts after buffer_start, which means records before current_pos
@@ -558,6 +572,12 @@ impl Reader {
                                     // Get the byte position after reading this record
                                     // The csv_reader position() gives us where we are after the iterator consumed the record
                                     let consumed_in_slice = csv_reader.position().byte() as usize;
+                                    
+                                    // Count newlines in the consumed record for accurate line_num tracking
+                                    // This handles multi-line records (quoted fields with newlines)
+                                    let record_end = consumed_in_slice.min(available_data.len());
+                                    let record_text = &available_data[..record_end];
+                                    let newline_count = record_text.as_bytes().iter().filter(|&&b| b == b'\n').count();
 
                                     // Update position and line_num
                                     {
@@ -565,10 +585,15 @@ impl Reader {
                                         *pos_guard = current_pos + 1;
                                     }
                                     {
-                                        // Increment line_num (1-based, simplified - counts records as lines)
-                                        // TODO: Count actual newlines in multi-line records for accuracy
+                                        // Increment line_num based on actual newlines in the record
+                                        // For multi-line records, this counts all lines, not just records
                                         let mut line_num_guard = line_num.lock().await;
-                                        *line_num_guard += 1;
+                                        if newline_count > 0 {
+                                            *line_num_guard += newline_count;
+                                        } else {
+                                            // If no newline found, increment by 1 (single-line record)
+                                            *line_num_guard += 1;
+                                        }
                                     }
 
                                     // Update buffer_start to track consumed bytes
@@ -695,7 +720,7 @@ impl Reader {
                             // Final parse attempt with all remaining data
                             let mut csv_reader_builder = ReaderBuilder::new();
                             csv_reader_builder.has_headers(false);
-                            dialect.apply_to_reader(&mut csv_reader_builder);
+                            dialect.apply_to_reader(&mut csv_reader_builder, field_size_limit);
                             let mut csv_reader = csv_reader_builder.from_reader(available_data.as_bytes());
 
                             // available_data starts after consumed records, so read first record
@@ -705,13 +730,25 @@ impl Reader {
                                 Some(Ok(record)) => {
                                     let row: Vec<String> =
                                         record.iter().map(|s| s.to_string()).collect();
+                                    
+                                    // Count newlines for accurate line_num tracking
+                                    let csv_position = csv_reader.position();
+                                    let consumed_in_slice = csv_position.byte() as usize;
+                                    let record_end = consumed_in_slice.min(available_data.len());
+                                    let record_text = &available_data[..record_end];
+                                    let newline_count = record_text.as_bytes().iter().filter(|&&b| b == b'\n').count();
+                                    
                                     {
-                                    let mut pos_guard = position.lock().await;
-                                    *pos_guard = current_pos + 1;
+                                        let mut pos_guard = position.lock().await;
+                                        *pos_guard = current_pos + 1;
                                     }
                                     {
                                         let mut line_num_guard = line_num.lock().await;
-                                        *line_num_guard += 1;
+                                        if newline_count > 0 {
+                                            *line_num_guard += newline_count;
+                                        } else {
+                                            *line_num_guard += 1;
+                                        }
                                     }
                                     buffer_guard.clear();
                                     *buffer_start_guard = 0;
@@ -773,6 +810,7 @@ impl Reader {
         let line_num = Arc::clone(&self_.line_num);
         let dialect = self_.dialect.clone();
         let chunk_size = self_.read_size;
+        let field_size_limit = self_.field_size_limit;
         Python::attach(|py| {
             let future = async move {
                 let mut rows: Vec<Vec<String>> = Vec::new();
@@ -813,7 +851,7 @@ impl Reader {
                         if !available_data.is_empty() {
                             let mut csv_reader_builder = ReaderBuilder::new();
                             csv_reader_builder.has_headers(false);
-                            dialect.apply_to_reader(&mut csv_reader_builder);
+                            dialect.apply_to_reader(&mut csv_reader_builder, field_size_limit);
                             let mut csv_reader = csv_reader_builder.from_reader(available_data.as_bytes());
                             let mut records_iter = csv_reader.records();
 
@@ -824,14 +862,24 @@ impl Reader {
                                             record.iter().map(|s| s.to_string()).collect();
 
                                         let consumed_in_slice = csv_reader.position().byte() as usize;
+                                        
+                                        // Count newlines in the consumed record for accurate line_num tracking
+                                        let record_end = consumed_in_slice.min(available_data.len());
+                                        let record_text = &available_data[..record_end];
+                                        let newline_count = record_text.as_bytes().iter().filter(|&&b| b == b'\n').count();
 
                                         {
                                             let mut pos_guard = position.lock().await;
                                             *pos_guard = current_pos + 1;
                                         }
                                         {
+                                            // Increment line_num based on actual newlines in the record
                                             let mut line_num_guard = line_num.lock().await;
-                                            *line_num_guard += 1;
+                                            if newline_count > 0 {
+                                                *line_num_guard += newline_count;
+                                            } else {
+                                                *line_num_guard += 1;
+                                            }
                                         }
 
                                         *buffer_start_guard += consumed_in_slice;
@@ -943,7 +991,7 @@ impl Reader {
                                 // Final parse attempt
                                 let mut csv_reader_builder = ReaderBuilder::new();
                                 csv_reader_builder.has_headers(false);
-                                dialect.apply_to_reader(&mut csv_reader_builder);
+                                dialect.apply_to_reader(&mut csv_reader_builder, None);
                                 let mut csv_reader = csv_reader_builder.from_reader(available_data.as_bytes());
                                 let mut records_iter = csv_reader.records();
 
@@ -951,13 +999,25 @@ impl Reader {
                                     Some(Ok(record)) => {
                                         let row: Vec<String> =
                                             record.iter().map(|s| s.to_string()).collect();
+                                        
+                                        let consumed_in_slice = csv_reader.position().byte() as usize;
+                                        
                                         {
                                             let mut pos_guard = position.lock().await;
                                             *pos_guard = current_pos + 1;
                                         }
                                         {
+                                            // Count newlines for accurate line_num tracking
+                                            let record_end = consumed_in_slice.min(available_data.len());
+                                            let record_text = &available_data[..record_end];
+                                            let newline_count = record_text.as_bytes().iter().filter(|&&b| b == b'\n').count();
+                                            
                                             let mut line_num_guard = line_num.lock().await;
-                                            *line_num_guard += 1;
+                                            if newline_count > 0 {
+                                                *line_num_guard += newline_count;
+                                            } else {
+                                                *line_num_guard += 1;
+                                            }
                                         }
                                         buffer_guard.clear();
                                         *buffer_start_guard = 0;
@@ -1011,6 +1071,7 @@ impl Reader {
         let line_num = Arc::clone(&self_.line_num);
         let dialect = self_.dialect.clone();
         let chunk_size = self_.read_size;
+        let field_size_limit = self_.field_size_limit;
         Python::attach(|py| {
             let future = async move {
                 // Get or open the file handle (once) - only for path-based sources
@@ -1049,7 +1110,7 @@ impl Reader {
                         if !available_data.is_empty() {
                             let mut csv_reader_builder = ReaderBuilder::new();
                             csv_reader_builder.has_headers(false);
-                            dialect.apply_to_reader(&mut csv_reader_builder);
+                            dialect.apply_to_reader(&mut csv_reader_builder, field_size_limit);
                             let mut csv_reader = csv_reader_builder.from_reader(available_data.as_bytes());
                             let mut records_iter = csv_reader.records();
 
@@ -1058,14 +1119,24 @@ impl Reader {
                                     Ok(_record) => {
                                         // Skip the actual data - just update position tracking
                                         let consumed_in_slice = csv_reader.position().byte() as usize;
+                                        
+                                        // Count newlines in the consumed record for accurate line_num tracking
+                                        let record_end = consumed_in_slice.min(available_data.len());
+                                        let record_text = &available_data[..record_end];
+                                        let newline_count = record_text.as_bytes().iter().filter(|&&b| b == b'\n').count();
 
                                         {
                                             let mut pos_guard = position.lock().await;
                                             *pos_guard = current_pos + 1;
                                         }
                                         {
+                                            // Increment line_num based on actual newlines in the record
                                             let mut line_num_guard = line_num.lock().await;
-                                            *line_num_guard += 1;
+                                            if newline_count > 0 {
+                                                *line_num_guard += newline_count;
+                                            } else {
+                                                *line_num_guard += 1;
+                                            }
                                         }
 
                                         *buffer_start_guard += consumed_in_slice;
@@ -1176,20 +1247,31 @@ impl Reader {
                                 // Final parse attempt
                                 let mut csv_reader_builder = ReaderBuilder::new();
                                 csv_reader_builder.has_headers(false);
-                                dialect.apply_to_reader(&mut csv_reader_builder);
+                                dialect.apply_to_reader(&mut csv_reader_builder, None);
                                 let mut csv_reader = csv_reader_builder.from_reader(available_data.as_bytes());
                                 let mut records_iter = csv_reader.records();
 
                                 match records_iter.next() {
                                     Some(Ok(_record)) => {
                                         // Skip the data, just update position
+                                        let consumed_in_slice = csv_reader.position().byte() as usize;
+                                        
                                         {
                                             let mut pos_guard = position.lock().await;
                                             *pos_guard = current_pos + 1;
                                         }
                                         {
+                                            // Count newlines for accurate line_num tracking
+                                            let record_end = consumed_in_slice.min(available_data.len());
+                                            let record_text = &available_data[..record_end];
+                                            let newline_count = record_text.as_bytes().iter().filter(|&&b| b == b'\n').count();
+                                            
                                             let mut line_num_guard = line_num.lock().await;
-                                            *line_num_guard += 1;
+                                            if newline_count > 0 {
+                                                *line_num_guard += newline_count;
+                                            } else {
+                                                *line_num_guard += 1;
+                                            }
                                         }
                                         buffer_guard.clear();
                                         *buffer_start_guard = 0;
@@ -1476,7 +1558,7 @@ impl AsyncDictReader {
                         if !available_data.is_empty() {
                             let mut csv_reader_builder = ReaderBuilder::new();
                             csv_reader_builder.has_headers(false);
-                            dialect.apply_to_reader(&mut csv_reader_builder);
+                            dialect.apply_to_reader(&mut csv_reader_builder, None);
                             let mut csv_reader = csv_reader_builder.from_reader(available_data.as_bytes());
                             let mut records_iter = csv_reader.records();
 
@@ -1487,14 +1569,24 @@ impl AsyncDictReader {
                                             record.iter().map(|s| s.to_string()).collect();
 
                                         let consumed_in_slice = csv_reader.position().byte() as usize;
+                                        
+                                        // Count newlines in the consumed record for accurate line_num tracking
+                                        let record_end = consumed_in_slice.min(available_data.len());
+                                        let record_text = &available_data[..record_end];
+                                        let newline_count = record_text.as_bytes().iter().filter(|&&b| b == b'\n').count();
 
                                         {
                                             let mut pos_guard = position.lock().await;
                                             *pos_guard = current_pos + 1;
                                         }
                                         {
+                                            // Increment line_num based on actual newlines in the record
                                             let mut line_num_guard = line_num.lock().await;
-                                            *line_num_guard += 1;
+                                            if newline_count > 0 {
+                                                *line_num_guard += newline_count;
+                                            } else {
+                                                *line_num_guard += 1;
+                                            }
                                         }
 
                                         *buffer_start_guard += consumed_in_slice;
@@ -1606,7 +1698,7 @@ impl AsyncDictReader {
                                 // Final parse attempt
                                 let mut csv_reader_builder = ReaderBuilder::new();
                                 csv_reader_builder.has_headers(false);
-                                dialect.apply_to_reader(&mut csv_reader_builder);
+                                dialect.apply_to_reader(&mut csv_reader_builder, None);
                                 let mut csv_reader = csv_reader_builder.from_reader(available_data.as_bytes());
                                 let mut records_iter = csv_reader.records();
 
@@ -1614,13 +1706,25 @@ impl AsyncDictReader {
                                     Some(Ok(record)) => {
                                         let row: Vec<String> =
                                             record.iter().map(|s| s.to_string()).collect();
+                                        
+                                        let consumed_in_slice = csv_reader.position().byte() as usize;
+                                        
                                         {
                                             let mut pos_guard = position.lock().await;
                                             *pos_guard = current_pos + 1;
                                         }
                                         {
+                                            // Count newlines for accurate line_num tracking
+                                            let record_end = consumed_in_slice.min(available_data.len());
+                                            let record_text = &available_data[..record_end];
+                                            let newline_count = record_text.as_bytes().iter().filter(|&&b| b == b'\n').count();
+                                            
                                             let mut line_num_guard = line_num.lock().await;
-                                            *line_num_guard += 1;
+                                            if newline_count > 0 {
+                                                *line_num_guard += newline_count;
+                                            } else {
+                                                *line_num_guard += 1;
+                                            }
                                         }
                                         buffer_guard.clear();
                                         *buffer_start_guard = 0;
@@ -1763,6 +1867,66 @@ impl AsyncDictReader {
                 ))
         })
     }
+
+    /// Add a field to the fieldnames list.
+    fn add_field(self_: PyRef<Self>, field_name: String) -> PyResult<Py<PyAny>> {
+        let fieldnames = Arc::clone(&self_.fieldnames);
+        Python::attach(|py| {
+            let future = async move {
+                let mut fieldnames_guard = fieldnames.lock().await;
+                if let Some(ref mut names) = *fieldnames_guard {
+                    if !names.contains(&field_name) {
+                        names.push(field_name);
+                    }
+                } else {
+                    // If fieldnames not yet loaded, initialize with the new field
+                    *fieldnames_guard = Some(vec![field_name]);
+                }
+                Ok(())
+            };
+            future_into_py(py, future).map(|bound| bound.unbind())
+        })
+    }
+
+    /// Remove a field from the fieldnames list.
+    fn remove_field(self_: PyRef<Self>, field_name: String) -> PyResult<Py<PyAny>> {
+        let fieldnames = Arc::clone(&self_.fieldnames);
+        Python::attach(|py| {
+            let future = async move {
+                let mut fieldnames_guard = fieldnames.lock().await;
+                if let Some(ref mut names) = *fieldnames_guard {
+                    names.retain(|name| name != &field_name);
+                }
+                Ok(())
+            };
+            future_into_py(py, future).map(|bound| bound.unbind())
+        })
+    }
+
+    /// Rename a field in the fieldnames list.
+    fn rename_field(self_: PyRef<Self>, old_name: String, new_name: String) -> PyResult<Py<PyAny>> {
+        let fieldnames = Arc::clone(&self_.fieldnames);
+        Python::attach(|py| {
+            let future = async move {
+                let mut fieldnames_guard = fieldnames.lock().await;
+                if let Some(ref mut names) = *fieldnames_guard {
+                    if let Some(pos) = names.iter().position(|name| name == &old_name) {
+                        names[pos] = new_name;
+                        Ok(())
+                    } else {
+                        Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                            format!("Field '{old_name}' not found in fieldnames")
+                        ))
+                    }
+                } else {
+                    Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                        "Fieldnames not yet loaded. Read at least one row first."
+                    ))
+                }
+            };
+            future_into_py(py, future).map(|bound| bound.unbind())
+        })
+    }
 }
 
 /// Async CSV DictWriter.
@@ -1878,6 +2042,7 @@ impl AsyncDictWriter {
                 quoting,
                 lineterminator,
                 double_quote,
+                None, // write_size - use default
             )?;
             // Create separate file Arc for DictWriter (shares same file, but separate Arc)
             // Note: This means DictWriter and Writer don't share file state, which is acceptable
@@ -2363,6 +2528,8 @@ struct Writer {
     file_handle: Arc<StdMutex<Option<Py<PyAny>>>>,  // Python file handle when source is Handle
     event_loop: Arc<StdMutex<Option<Py<PyAny>>>>,  // Event loop reference for run_coroutine_threadsafe
     dialect: DialectConfig,
+    #[allow(dead_code)] // Will be used for buffering write operations in future
+    write_size: usize, // Configurable buffer size for writing
 }
 
 #[pymethods]
@@ -2374,9 +2541,10 @@ impl Writer {
     /// * `delimiter` - Field delimiter (default: ',')
     /// * `quotechar` - Quote character (default: '"')
     /// * `escapechar` - Escape character (default: None)
-    /// * `quoting` - Quoting style: 0=QUOTE_NONE, 1=QUOTE_MINIMAL, 2=QUOTE_ALL, 3=QUOTE_NONNUMERIC
+    /// * `quoting` - Quoting style: 0=QUOTE_NONE, 1=QUOTE_MINIMAL, 2=QUOTE_ALL, 3=QUOTE_NONNUMERIC, 4=QUOTE_NOTNULL, 6=QUOTE_STRINGS
     /// * `lineterminator` - Line terminator (default: '\r\n')
     /// * `double_quote` - Handle doubled quotes (default: true)
+    /// * `write_size` - Buffer size for writing chunks (default: 8192)
     #[new]
     #[pyo3(signature = (
         path_or_handle,
@@ -2385,7 +2553,8 @@ impl Writer {
         escapechar = None,
         quoting = None,
         lineterminator = None,
-        double_quote = None
+        double_quote = None,
+        write_size = None
     ))]
     #[allow(clippy::too_many_arguments)] // Required for Python API compatibility
     fn new(
@@ -2397,6 +2566,7 @@ impl Writer {
         quoting: Option<u32>,
         lineterminator: Option<&str>,
         double_quote: Option<bool>,
+        write_size: Option<usize>,
     ) -> PyResult<Self> {
         // Try to extract as string first (file path)
         let (source, path, file_handle, event_loop) = if let Ok(path_str) = path_or_handle.extract::<String>() {
@@ -2447,6 +2617,7 @@ impl Writer {
             file_handle,
             event_loop,
             dialect,
+            write_size: write_size.unwrap_or(8192),
         })
     }
 

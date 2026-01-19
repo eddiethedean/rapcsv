@@ -46,7 +46,7 @@ jobs:
 
     - name: Install test dependencies
       shell: bash
-      run: pip install pytest pytest-asyncio
+      run: pip install -e ".[test]"
 
     - name: Test package import
       shell: bash
@@ -70,12 +70,26 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
     - name: Set up Rust
       uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
         components: clippy, rustfmt
         override: true
+
+    - name: Install Ruff
+      run: pip install ruff
+
+    - name: Run Ruff linter
+      run: ruff check .
+
+    - name: Check Ruff formatting
+      run: ruff format --check .
 
     - name: Run clippy
       run: cargo clippy --lib -- -D clippy::all -A deprecated

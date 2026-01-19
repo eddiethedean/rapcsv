@@ -1,19 +1,22 @@
 """Test Phase 2 features: dialects, DictReader/DictWriter, iterator protocol, and aiocsv parity."""
 
-import pytest
-import tempfile
 import os
-import asyncio
+import tempfile
+
+import pytest
 
 from rapcsv import (
-    Reader, Writer, AsyncDictReader, AsyncDictWriter,
-    AsyncReader, AsyncWriter, CSVError
+    AsyncDictReader,
+    AsyncDictWriter,
+    Reader,
+    Writer,
 )
 
 # Try importing aiocsv for parity tests (optional)
 try:
     import aiocsv
     import aiofiles
+
     AIOCSV_AVAILABLE = True
 except ImportError:
     AIOCSV_AVAILABLE = False
@@ -22,6 +25,7 @@ except ImportError:
 # ============================================================================
 # Dialect Tests
 # ============================================================================
+
 
 @pytest.mark.asyncio
 async def test_dialect_custom_delimiter():
@@ -35,7 +39,7 @@ async def test_dialect_custom_delimiter():
         reader = Reader(test_file, delimiter="|")
         row1 = await reader.read_row()
         assert row1 == ["col1", "col2", "col3"]
-        
+
         row2 = await reader.read_row()
         assert row2 == ["val1", "val2", "val3"]
     finally:
@@ -73,7 +77,7 @@ async def test_dialect_write_custom_delimiter():
         await writer.close()
 
         # Read back and verify
-        with open(test_file, "r") as f:
+        with open(test_file) as f:
             lines = f.readlines()
         assert len(lines) >= 2
         assert "|" in lines[0]
@@ -85,6 +89,7 @@ async def test_dialect_write_custom_delimiter():
 # ============================================================================
 # DictReader Tests
 # ============================================================================
+
 
 @pytest.mark.asyncio
 async def test_dictreader_basic():
@@ -100,7 +105,7 @@ async def test_dictreader_basic():
         row1 = await reader.read_row()
         assert isinstance(row1, dict)
         assert row1 == {"name": "Alice", "age": "30", "city": "New York"}
-        
+
         row2 = await reader.read_row()
         assert row2 == {"name": "Bob", "age": "25", "city": "London"}
     finally:
@@ -118,17 +123,15 @@ async def test_dictreader_fieldnames_lazy_loading():
 
     try:
         reader = AsyncDictReader(test_file)
-        
+
         # Before first read, fieldnames might be None (property access may vary)
         # Use get_fieldnames() coroutine for reliable access
-        fieldnames_before = await reader.get_fieldnames()
-        # Should be None before first read, but may also raise error
         # Just proceed to read
-        
+
         # After first read, fieldnames should be loaded
         row = await reader.read_row()
         assert isinstance(row, dict)
-        
+
         # Check fieldnames property (may still be None if accessed from sync context)
         # Use get_fieldnames() coroutine instead
         fieldnames_async = await reader.get_fieldnames()
@@ -210,7 +213,7 @@ async def test_dictreader_async_for():
             if not row:  # Skip empty rows (EOF)
                 break
             rows.append(row)
-        
+
         assert len(rows) == 2
         assert rows[0] == {"name": "Alice", "age": "30"}
         assert rows[1] == {"name": "Bob", "age": "25"}
@@ -222,6 +225,7 @@ async def test_dictreader_async_for():
 # ============================================================================
 # DictWriter Tests
 # ============================================================================
+
 
 @pytest.mark.asyncio
 async def test_dictwriter_writeheader():
@@ -235,7 +239,7 @@ async def test_dictwriter_writeheader():
         await writer.close()
 
         # Verify header was written
-        with open(test_file, "r") as f:
+        with open(test_file) as f:
             content = f.read()
         assert "name,age,city" in content or "name" in content
     finally:
@@ -264,7 +268,7 @@ async def test_dictwriter_writerow():
             if not row:
                 break
             rows.append(row)
-        
+
         assert len(rows) >= 3  # Header + 2 data rows
         assert rows[0] == ["name", "age", "city"]
     finally:
@@ -326,7 +330,7 @@ async def test_dictwriter_extrasaction_raise():
     try:
         writer = AsyncDictWriter(test_file, fieldnames=["name", "age"], extrasaction="raise")
         await writer.writeheader()
-        
+
         # Should raise ValueError for extra key
         with pytest.raises(ValueError, match="dict contains fields not in fieldnames"):
             await writer.writerow({"name": "Alice", "age": "30", "extra": "should raise"})
@@ -360,7 +364,7 @@ async def test_dictwriter_writerows():
             if not row:
                 break
             read_rows.append(row)
-        
+
         assert len(read_rows) == 4  # Header + 3 data rows
     finally:
         if os.path.exists(test_file):
@@ -370,6 +374,7 @@ async def test_dictwriter_writerows():
 # ============================================================================
 # Reader/Writer Enhancement Methods
 # ============================================================================
+
 
 @pytest.mark.asyncio
 async def test_read_rows():
@@ -405,7 +410,7 @@ async def test_skip_rows():
         reader = Reader(test_file)
         # Skip header and first 2 rows
         await reader.skip_rows(3)
-        
+
         # Next read should be val2
         row = await reader.read_row()
         assert row == ["val2_1", "val2_2"]
@@ -439,7 +444,7 @@ async def test_writerows():
             if not row:
                 break
             read_rows.append(row)
-        
+
         assert len(read_rows) == 4
     finally:
         if os.path.exists(test_file):
@@ -449,6 +454,7 @@ async def test_writerows():
 # ============================================================================
 # Iterator Protocol Tests
 # ============================================================================
+
 
 @pytest.mark.asyncio
 async def test_reader_async_for():
@@ -466,7 +472,7 @@ async def test_reader_async_for():
             if not row:  # Skip empty rows (EOF)
                 break
             rows.append(row)
-        
+
         assert len(rows) == 3
         assert rows[0] == ["col1", "col2"]
         assert rows[1] == ["val1", "val2"]
@@ -480,6 +486,7 @@ async def test_reader_async_for():
 # Line Number Tracking Tests
 # ============================================================================
 
+
 @pytest.mark.asyncio
 async def test_line_num_tracking():
     """Test that line_num property tracks line numbers correctly."""
@@ -492,13 +499,13 @@ async def test_line_num_tracking():
     try:
         reader = Reader(test_file)
         assert reader.line_num == 0  # Before first read
-        
+
         await reader.read_row()
         assert reader.line_num == 1  # After first row
-        
+
         await reader.read_row()
         assert reader.line_num == 2  # After second row
-        
+
         await reader.read_row()
         assert reader.line_num == 3  # After third row
     finally:
@@ -509,6 +516,7 @@ async def test_line_num_tracking():
 # ============================================================================
 # aiocsv Parity Tests (if aiocsv is available)
 # ============================================================================
+
 
 @pytest.mark.skipif(not AIOCSV_AVAILABLE, reason="aiocsv not available")
 @pytest.mark.asyncio
@@ -523,12 +531,12 @@ async def test_parity_dictreader_basic():
         # Test rapcsv
         rapcsv_reader = AsyncDictReader(test_file)
         rapcsv_row = await rapcsv_reader.read_row()
-        
+
         # Test aiocsv (uses async iteration)
-        async with aiofiles.open(test_file, mode="r", encoding="utf-8", newline="") as af:
+        async with aiofiles.open(test_file, encoding="utf-8", newline="") as af:
             aiocsv_reader = aiocsv.AsyncDictReader(af)
             aiocsv_row = await aiocsv_reader.__anext__()
-        
+
         # Compare
         assert rapcsv_row == aiocsv_row
     finally:
@@ -549,19 +557,19 @@ async def test_parity_dictwriter_basic():
         await rapcsv_writer.writeheader()
         await rapcsv_writer.writerow({"name": "Alice", "age": "30"})
         await rapcsv_writer.close()
-        
+
         # Test aiocsv
         async with aiofiles.open(aiocsv_file, mode="w", encoding="utf-8", newline="") as af:
             aiocsv_writer = aiocsv.AsyncDictWriter(af, fieldnames=["name", "age"])
             await aiocsv_writer.writeheader()
             await aiocsv_writer.writerow({"name": "Alice", "age": "30"})
-        
+
         # Compare file contents (allow for minor formatting differences)
-        with open(rapcsv_file, "r") as f:
+        with open(rapcsv_file) as f:
             rapcsv_content = f.read()
-        with open(aiocsv_file, "r") as f:
-            aiocsv_content = f.read()
-        
+        with open(aiocsv_file) as f:
+            _aiocsv_content = f.read()  # Read for comparison but not used in assertions
+
         # Both should contain the header and data
         assert "name,age" in rapcsv_content or "name" in rapcsv_content
         assert "Alice" in rapcsv_content
