@@ -4,19 +4,16 @@ This module tests all code examples found in README.md and documentation files
 to ensure they work correctly and remain accurate as the codebase evolves.
 """
 
-import asyncio
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from rapcsv import (
-    AsyncDictReader,
-    AsyncDictWriter,
     EXCEL_DIALECT,
     RFC4180_DIALECT,
-    Reader,
     UNIX_DIALECT,
+    AsyncDictReader,
+    AsyncDictWriter,
+    Reader,
     Writer,
     convert_types,
 )
