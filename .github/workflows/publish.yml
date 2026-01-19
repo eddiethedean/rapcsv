@@ -273,11 +273,33 @@ jobs:
           retention-days: 7
 
   test:
-    name: Run tests before publishing
-    runs-on: ubuntu-latest
+    name: Run tests before publishing (${{ matrix.os }} / py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13']
+        include:
+          # Test on each major platform with representative Python versions
+          - os: ubuntu-latest
+            python-version: '3.8'
+          - os: ubuntu-latest
+            python-version: '3.11'
+          - os: ubuntu-latest
+            python-version: '3.13'
+          - os: ubuntu-latest
+            python-version: '3.14'
+          - os: macos-latest
+            python-version: '3.8'
+          - os: macos-latest
+            python-version: '3.11'
+          - os: macos-latest
+            python-version: '3.13'
+          - os: windows-latest
+            python-version: '3.8'
+          - os: windows-latest
+            python-version: '3.11'
+          - os: windows-latest
+            python-version: '3.13'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -293,13 +315,20 @@ jobs:
       - name: Install maturin
         run: pip install maturin
 
-      - name: Build package
+      - name: Build package (Linux)
+        if: runner.os == 'Linux'
+        run: python -m maturin build --release --skip-auditwheel
+
+      - name: Build package (macOS/Windows)
+        if: runner.os != 'Linux'
         run: python -m maturin build --release
 
       - name: Install package
+        shell: bash
         run: pip install target/wheels/rapcsv-*.whl --force-reinstall
 
       - name: Install test dependencies
+        shell: bash
         run: pip install -e ".[test]"
 
       - name: Run tests
