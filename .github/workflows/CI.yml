@@ -61,6 +61,8 @@ jobs:
         if [ -d test_data ]; then
           cp -r test_data /tmp/
         fi
+        # Copy pyproject.toml so pytest can read asyncio_mode configuration
+        cp pyproject.toml /tmp/
         cd /tmp
         python -m pytest tests/ -v
 
