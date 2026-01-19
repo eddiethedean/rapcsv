@@ -145,7 +145,7 @@ For detailed release notes, see [CHANGELOG.md](https://github.com/eddiethedean/r
 
 ## Contributing
 
-Contributions are welcome! Please see our [contributing guidelines](https://github.com/eddiethedean/rapcsv/blob/main/CONTRIBUTING.md) (coming soon).
+Contributions are welcome! Please open an issue or submit a pull request on [GitHub](https://github.com/eddiethedean/rapcsv).
 
 ## License
 

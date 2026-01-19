@@ -1,6 +1,6 @@
 # rapcsv Roadmap
 
-This roadmap outlines the development plan for `rapcsv`, aligned with the [RAP Project Strategic Plan](../rap-project-plan.md). `rapcsv` provides true async CSV reading and writing for Python, backed by Rust and Tokio.
+This roadmap outlines the development plan for `rapcsv`. `rapcsv` provides true async CSV reading and writing for Python, backed by Rust and Tokio.
 
 ## Current Status
 

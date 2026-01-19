@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.0] - 2025-01-XX
+## [0.2.0] - 2026-01-19
 
 ### Added
 - **Advanced Quoting Modes**: Support for QUOTE_NOTNULL (4) and QUOTE_STRINGS (6) quoting modes
@@ -43,7 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced API reference documentation
 - Added benchmark documentation
 
-## [0.1.2] - 2025-01-XX
+## [0.1.2] - 2026-01-16
 
 ### Added
 - Support for async file-like objects from `aiofiles` and `rapfiles`
