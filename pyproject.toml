@@ -98,6 +98,9 @@ ignore = [
     "E501",  # line too long (handled by formatter)
     "B008",  # do not perform function calls in argument defaults
     "ARG001", # unused function argument (common in protocol implementations)
+    "UP045", # Use X | None (requires Python 3.10+, project supports 3.8+)
+    "UP006", # Use list instead of List (requires Python 3.9+, project supports 3.8+)
+    "UP037", # Use X | Y instead of Union[X, Y] (requires Python 3.10+, project supports 3.8+)
 ]
 
 [tool.ruff.format]
@@ -105,3 +108,14 @@ quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "_rapcsv"
+ignore_missing_imports = true

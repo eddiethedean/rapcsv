@@ -4,30 +4,29 @@ This module tests all code examples found in docstrings to ensure they work corr
 and remain accurate as the codebase evolves.
 """
 
-import asyncio
 import tempfile
 from pathlib import Path
 
 import pytest
 
 from rapcsv import (
+    EXCEL_DIALECT,
+    RFC4180_DIALECT,
+    UNIX_DIALECT,
     AsyncDictReader,
     AsyncDictWriter,
     AsyncReader,
     AsyncWriter,
     CSVError,
     CSVFieldCountError,
-    EXCEL_DIALECT,
-    RFC4180_DIALECT,
     Reader,
-    UNIX_DIALECT,
     Writer,
     convert_types,
 )
 
 # Check if optional dependencies are available
 try:
-    import aiofiles
+    import aiofiles  # noqa: F401
 
     AIOFILES_AVAILABLE = True
 except ImportError:
@@ -59,9 +58,7 @@ class TestModuleLevelExample:
 class TestProtocolExamples:
     """Test examples for WithAsyncRead and WithAsyncWrite protocols."""
 
-    @pytest.mark.skipif(
-        not AIOFILES_AVAILABLE, reason="aiofiles not available"
-    )
+    @pytest.mark.skipif(not AIOFILES_AVAILABLE, reason="aiofiles not available")
     async def test_with_async_read_example(self):
         """Test WithAsyncRead protocol example with aiofiles."""
         import aiofiles
@@ -71,16 +68,14 @@ class TestProtocolExamples:
             temp_path = f.name
 
         try:
-            async with aiofiles.open(temp_path, mode="r") as f:
+            async with aiofiles.open(temp_path) as f:
                 reader = Reader(f)  # f implements WithAsyncRead
                 row = await reader.read_row()
                 assert row == ["name", "age"]
         finally:
             Path(temp_path).unlink()
 
-    @pytest.mark.skipif(
-        not AIOFILES_AVAILABLE, reason="aiofiles not available"
-    )
+    @pytest.mark.skipif(not AIOFILES_AVAILABLE, reason="aiofiles not available")
     async def test_with_async_write_example(self):
         """Test WithAsyncWrite protocol example with aiofiles."""
         import aiofiles
@@ -246,9 +241,7 @@ class TestReaderExamples:
         finally:
             Path(temp_path).unlink()
 
-    @pytest.mark.skipif(
-        not AIOFILES_AVAILABLE, reason="aiofiles not available"
-    )
+    @pytest.mark.skipif(not AIOFILES_AVAILABLE, reason="aiofiles not available")
     async def test_reader_file_handle_example(self):
         """Test Reader with async file handle example."""
         import aiofiles
@@ -259,7 +252,7 @@ class TestReaderExamples:
 
         try:
             # Read from async file handle
-            async with aiofiles.open(temp_path, mode="r") as f:
+            async with aiofiles.open(temp_path) as f:
                 reader = Reader(f)
                 row = await reader.read_row()
                 assert row == ["name", "age"]
@@ -288,9 +281,7 @@ class TestWriterExamples:
         finally:
             Path(temp_path).unlink()
 
-    @pytest.mark.skipif(
-        not AIOFILES_AVAILABLE, reason="aiofiles not available"
-    )
+    @pytest.mark.skipif(not AIOFILES_AVAILABLE, reason="aiofiles not available")
     async def test_writer_file_handle_example(self):
         """Test Writer with async file handle example."""
         import aiofiles
@@ -381,10 +372,11 @@ class TestExceptionExamples:
         try:
             async with Reader(temp_path) as reader:
                 try:
-                    row = await reader.read_row()  # Header should work
-                    row = await reader.read_row()  # This should raise CSVError
+                    await reader.read_row()  # Header should work
+                    _row = await reader.read_row()  # This should raise CSVError
                     # If we get here, the error wasn't raised (might depend on parser)
                     # Some malformed CSVs might not raise immediately
+                    del _row  # Suppress unused variable warning
                 except CSVError as e:
                     # Expected behavior
                     assert "CSV parsing error" in str(e) or isinstance(e, CSVError)
@@ -401,9 +393,10 @@ class TestExceptionExamples:
         try:
             async with Reader(temp_path, strict=True) as reader:
                 try:
-                    row = await reader.read_row()  # Header should work
-                    row = await reader.read_row()  # This might raise CSVFieldCountError
+                    await reader.read_row()  # Header should work
+                    _row = await reader.read_row()  # This might raise CSVFieldCountError
                     # Note: strict mode behavior may vary
+                    del _row  # Suppress unused variable warning
                 except CSVFieldCountError as e:
                     # Expected behavior
                     assert "Field count mismatch" in str(e) or isinstance(e, CSVFieldCountError)

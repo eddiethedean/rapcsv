@@ -548,8 +548,10 @@ async def test_parity_dictreader_basic():
 @pytest.mark.asyncio
 async def test_parity_dictwriter_basic():
     """Test DictWriter parity with aiocsv."""
-    rapcsv_file = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".csv").name
-    aiocsv_file = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".csv").name
+    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".csv") as f:
+        rapcsv_file = f.name
+    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".csv") as f:
+        aiocsv_file = f.name
 
     try:
         # Test rapcsv

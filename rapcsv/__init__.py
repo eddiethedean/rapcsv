@@ -202,7 +202,9 @@ except ImportError:
             Writer,
         )
     except ImportError as err:
-        raise ImportError("Could not import _rapcsv. Make sure rapcsv is built with maturin.") from err
+        raise ImportError(
+            "Could not import _rapcsv. Make sure rapcsv is built with maturin."
+        ) from err
 
 # API compatibility with aiocsv
 # aiocsv uses AsyncReader and AsyncWriter as class names

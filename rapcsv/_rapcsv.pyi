@@ -10,7 +10,6 @@ Note:
 
 from typing import Any, Coroutine, Dict, List, Optional
 
-
 class Reader:
     """Async CSV reader for streaming CSV files.
 
@@ -62,7 +61,6 @@ class Reader:
         read_size: Optional[int] = None,
         field_size_limit: Optional[int] = None,
     ) -> None: ...
-
     def read_row(self) -> Coroutine[Any, Any, List[str]]:
         """Read the next row from the CSV file.
 
@@ -127,7 +125,6 @@ class Reader:
         """Async context manager exit - closes the file handle."""
         ...
 
-
 class Writer:
     """Async CSV writer for streaming CSV files.
 
@@ -173,7 +170,6 @@ class Writer:
         double_quote: Optional[bool] = None,
         write_size: Optional[int] = None,
     ) -> None: ...
-
     def write_row(self, row: List[str]) -> Coroutine[Any, Any, None]:
         """Write a row to the CSV file.
 
@@ -213,7 +209,6 @@ class Writer:
     ) -> Coroutine[Any, Any, None]:
         """Async context manager exit - closes the file handle and flushes writes."""
         ...
-
 
 class AsyncDictReader:
     """Async dictionary-based CSV reader.
@@ -269,7 +264,6 @@ class AsyncDictReader:
         double_quote: Optional[bool] = None,
         read_size: Optional[int] = None,
     ) -> None: ...
-
     def read_row(self) -> Coroutine[Any, Any, Dict[str, str]]:
         """Read the next row as a dictionary.
 
@@ -332,7 +326,6 @@ class AsyncDictReader:
         """Async iterator next - returns next row as dict or raises StopAsyncIteration."""
         ...
 
-
 class AsyncDictWriter:
     """Async dictionary-based CSV writer.
 
@@ -377,7 +370,6 @@ class AsyncDictWriter:
         double_quote: Optional[bool] = None,
         write_size: Optional[int] = None,
     ) -> None: ...
-
     def writeheader(self) -> Coroutine[Any, Any, None]:
         """Write header row with fieldnames."""
         ...
@@ -419,7 +411,6 @@ class AsyncDictWriter:
         """Async context manager exit - closes the file handle and flushes writes."""
         ...
 
-
 class CSVError(Exception):
     """Raised when a CSV parsing error occurs.
 
@@ -439,7 +430,6 @@ class CSVError(Exception):
     """
 
     ...
-
 
 class CSVFieldCountError(Exception):
     """Raised when there's a mismatch in the number of fields between rows.
