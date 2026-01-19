@@ -203,8 +203,8 @@ jobs:
           # Install the built wheel
           pip install dist/*.whl --force-reinstall
           
-          # Install test dependencies
-          pip install -e ".[test]"
+          # Install test dependencies (without editable install to avoid permission issues)
+          pip install pytest>=7.0 pytest-asyncio>=0.23.8 pytest-timeout>=2.0 aiocsv>=0.3.0 aiofiles>=23.0 rapfiles>=0.2.1
           
           # Create a temporary directory (works on all platforms)
           TEST_DIR=$(mktemp -d 2>/dev/null || mktemp -d -t 'rapcsv-test')
@@ -257,8 +257,8 @@ jobs:
           # Install the built wheel
           pip install dist/*.whl --force-reinstall
           
-          # Install test dependencies
-          pip install -e ".[test]"
+          # Install test dependencies (without editable install to avoid permission issues)
+          pip install pytest>=7.0 pytest-asyncio>=0.23.8 pytest-timeout>=2.0 aiocsv>=0.3.0 aiofiles>=23.0 rapfiles>=0.2.1
           
           # Create a temporary directory (works on all platforms)
           TEST_DIR=$(mktemp -d 2>/dev/null || mktemp -d -t 'rapcsv-test')
