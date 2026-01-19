@@ -243,10 +243,10 @@ EXCEL_DIALECT: Dict[str, Any] = {
 """Excel-compatible CSV dialect preset.
 
 This dialect matches Microsoft Excel's CSV format:
-- Delimiter: comma (`,`)
-- Quote character: double quote (`"`)
-- Line terminator: CRLF (`\\r\\n`)
-- Quoting: QUOTE_MINIMAL
+- Delimiter: comma (``,``)
+- Quote character: double quote (``"``)
+- Line terminator: CRLF (``\\r\\n``)
+- Quoting: QUOTE_MINIMAL (1)
 - Double quote: enabled
 
 Example:
@@ -268,10 +268,10 @@ UNIX_DIALECT: Dict[str, Any] = {
 """Unix-compatible CSV dialect preset.
 
 This dialect uses Unix-style line endings:
-- Delimiter: comma (`,`)
-- Quote character: double quote (`"`)
-- Line terminator: LF (`\\n`)
-- Quoting: QUOTE_MINIMAL
+- Delimiter: comma (``,``)
+- Quote character: double quote (``"``)
+- Line terminator: LF (``\\n``)
+- Quoting: QUOTE_MINIMAL (1)
 - Double quote: enabled
 
 Example:
@@ -292,11 +292,11 @@ RFC4180_DIALECT: Dict[str, Any] = {
 }
 """RFC 4180 compliant CSV dialect preset.
 
-This dialect follows the RFC 4180 standard for CSV files:
-- Delimiter: comma (`,`)
-- Quote character: double quote (`"`)
-- Line terminator: CRLF (`\\r\\n`)
-- Quoting: QUOTE_MINIMAL
+This dialect strictly follows RFC 4180 specification:
+- Delimiter: comma (``,``)
+- Quote character: double quote (``"``)
+- Line terminator: CRLF (``\\r\\n``)
+- Quoting: QUOTE_MINIMAL (1)
 - Double quote: enabled
 
 Example:

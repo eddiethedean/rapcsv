@@ -1,24 +1,23 @@
 """Test async file-like object support (aiofiles and rapfiles)."""
 
-import pytest
-import tempfile
 import os
-import asyncio
+import tempfile
 
-from rapcsv import (
-    Reader, Writer, AsyncDictReader, AsyncDictWriter,
-    CSVError
-)
+import pytest
+
+from rapcsv import AsyncDictReader, AsyncDictWriter, Reader, Writer
 
 # Try importing aiofiles and rapfiles
 try:
     import aiofiles
+
     AIOFILES_AVAILABLE = True
 except ImportError:
     AIOFILES_AVAILABLE = False
 
 try:
     import rapfiles
+
     RAPFILES_AVAILABLE = True
 except ImportError:
     RAPFILES_AVAILABLE = False
@@ -27,6 +26,7 @@ except ImportError:
 # ============================================================================
 # Reader with File Handles
 # ============================================================================
+
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(not AIOFILES_AVAILABLE, reason="aiofiles not available")
@@ -40,17 +40,17 @@ async def test_reader_with_aiofiles():
         f.write("val4,val5,val6\n")
 
     try:
-        async with aiofiles.open(test_file, mode="r") as f:
+        async with aiofiles.open(test_file) as f:
             reader = Reader(f)
             row1 = await reader.read_row()
             assert row1 == ["col1", "col2", "col3"]
-            
+
             row2 = await reader.read_row()
             assert row2 == ["val1", "val2", "val3"]
-            
+
             row3 = await reader.read_row()
             assert row3 == ["val4", "val5", "val6"]
-            
+
             # EOF
             row4 = await reader.read_row()
             assert row4 == []
@@ -74,7 +74,7 @@ async def test_reader_with_rapfiles():
             reader = Reader(f)
             row1 = await reader.read_row()
             assert row1 == ["col1", "col2", "col3"]
-            
+
             row2 = await reader.read_row()
             assert row2 == ["val1", "val2", "val3"]
     finally:
@@ -93,7 +93,7 @@ async def test_reader_read_rows_with_aiofiles():
         f.write("row3,col5,col6\n")
 
     try:
-        async with aiofiles.open(test_file, mode="r") as f:
+        async with aiofiles.open(test_file) as f:
             reader = Reader(f)
             rows = await reader.read_rows(2)
             assert len(rows) == 2
@@ -115,7 +115,7 @@ async def test_reader_skip_rows_with_aiofiles():
         f.write("keep1,col5,col6\n")
 
     try:
-        async with aiofiles.open(test_file, mode="r") as f:
+        async with aiofiles.open(test_file) as f:
             reader = Reader(f)
             await reader.skip_rows(2)
             row = await reader.read_row()
@@ -128,6 +128,7 @@ async def test_reader_skip_rows_with_aiofiles():
 # ============================================================================
 # Writer with File Handles
 # ============================================================================
+
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(not AIOFILES_AVAILABLE, reason="aiofiles not available")
@@ -144,7 +145,7 @@ async def test_writer_with_aiofiles():
             await writer.close()
 
         # Read back and verify
-        with open(test_file, "r") as f:
+        with open(test_file) as f:
             content = f.read()
             assert "col1,col2,col3" in content
             assert "val1,val2,val3" in content
@@ -168,7 +169,7 @@ async def test_writer_with_rapfiles():
             await writer.close()
 
         # Read back and verify
-        with open(test_file, "r") as f:
+        with open(test_file) as f:
             content = f.read()
             assert "col1,col2" in content
             assert "val1,val2" in content
@@ -187,16 +188,12 @@ async def test_writer_writerows_with_aiofiles():
     try:
         async with aiofiles.open(test_file, mode="w") as f:
             writer = Writer(f)
-            rows = [
-                ["col1", "col2", "col3"],
-                ["val1", "val2", "val3"],
-                ["val4", "val5", "val6"]
-            ]
+            rows = [["col1", "col2", "col3"], ["val1", "val2", "val3"], ["val4", "val5", "val6"]]
             await writer.writerows(rows)
             await writer.close()
 
         # Read back and verify
-        with open(test_file, "r") as f:
+        with open(test_file) as f:
             lines = f.readlines()
             assert len(lines) == 3
             assert "col1,col2,col3" in lines[0]
@@ -209,6 +206,7 @@ async def test_writer_writerows_with_aiofiles():
 # AsyncDictReader with File Handles
 # ============================================================================
 
+
 @pytest.mark.asyncio
 @pytest.mark.skipif(not AIOFILES_AVAILABLE, reason="aiofiles not available")
 async def test_dictreader_with_aiofiles():
@@ -220,11 +218,11 @@ async def test_dictreader_with_aiofiles():
         f.write("Bob,25,LA\n")
 
     try:
-        async with aiofiles.open(test_file, mode="r") as f:
+        async with aiofiles.open(test_file) as f:
             reader = AsyncDictReader(f)
             row1 = await reader.read_row()
             assert row1 == {"name": "Alice", "age": "30", "city": "NYC"}
-            
+
             row2 = await reader.read_row()
             assert row2 == {"name": "Bob", "age": "25", "city": "LA"}
     finally:
@@ -255,6 +253,7 @@ async def test_dictreader_with_rapfiles():
 # AsyncDictWriter with File Handles
 # ============================================================================
 
+
 @pytest.mark.asyncio
 @pytest.mark.skipif(not AIOFILES_AVAILABLE, reason="aiofiles not available")
 async def test_dictwriter_with_aiofiles():
@@ -270,7 +269,7 @@ async def test_dictwriter_with_aiofiles():
             await writer.writerow({"name": "Bob", "age": "25", "city": "LA"})
 
         # Read back and verify
-        with open(test_file, "r") as f:
+        with open(test_file) as f:
             lines = f.readlines()
             assert len(lines) == 3
             assert "name,age,city" in lines[0]
@@ -295,7 +294,7 @@ async def test_dictwriter_with_rapfiles():
             await writer.writerow({"name": "Alice", "age": "30"})
 
         # Read back and verify
-        with open(test_file, "r") as f:
+        with open(test_file) as f:
             content = f.read()
             assert "name,age" in content
             assert "Alice,30" in content
@@ -307,6 +306,7 @@ async def test_dictwriter_with_rapfiles():
 # ============================================================================
 # Roundtrip Tests
 # ============================================================================
+
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(not AIOFILES_AVAILABLE, reason="aiofiles not available")
@@ -323,7 +323,7 @@ async def test_roundtrip_write_read_with_aiofiles():
             await writer.write_row(["val1", "val2", "val3"])
 
         # Read
-        async with aiofiles.open(test_file, mode="r") as f:
+        async with aiofiles.open(test_file) as f:
             reader = Reader(f)
             row1 = await reader.read_row()
             assert row1 == ["col1", "col2", "col3"]
@@ -362,6 +362,7 @@ async def test_roundtrip_dictwriter_dictreader_with_rapfiles():
 # Backward Compatibility Tests
 # ============================================================================
 
+
 @pytest.mark.asyncio
 async def test_reader_still_works_with_path():
     """Test that Reader still works with file paths (backward compatibility)."""
@@ -392,7 +393,7 @@ async def test_writer_still_works_with_path():
         await writer.write_row(["col1", "col2"])
         await writer.close()
 
-        with open(test_file, "r") as f:
+        with open(test_file) as f:
             content = f.read()
             assert "col1,col2" in content
     finally:

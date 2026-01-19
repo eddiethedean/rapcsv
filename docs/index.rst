@@ -1,5 +1,5 @@
 rapcsv Documentation
-====================
+===================
 
 **Streaming async CSV — no fake async, no GIL stalls.**
 
@@ -11,8 +11,8 @@ operations execute **outside the Python GIL**, ensuring event loops never stall 
    :maxdepth: 2
    :caption: Contents:
 
-   usage
-   api
+   api/index
+   usage_guide
    installation
    status
    roadmap
@@ -29,12 +29,12 @@ Quick Start
 
     async def main():
         async with Writer("output.csv") as writer:
-            await writer.write_row(["name", "age"])
-            await writer.write_row(["Alice", "30"])
+            await writer.write_row(["name", "age", "city"])
+            await writer.write_row(["Alice", "30", "New York"])
 
         async with Reader("output.csv") as reader:
             row = await reader.read_row()
-            print(row)  # ['name', 'age']
+            print(row)  # ['name', 'age', 'city']
 
     asyncio.run(main())
 

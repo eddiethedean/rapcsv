@@ -2,6 +2,10 @@
 
 This module provides type information for the Rust-compiled extension module.
 All classes and methods are implemented in Rust and exposed to Python via PyO3.
+
+Note:
+    This is a type stub file (``.pyi``) used for static type checking.
+    The actual implementation is in the compiled Rust extension module.
 """
 
 from typing import Any, Coroutine, Dict, List, Optional
@@ -420,6 +424,18 @@ class CSVError(Exception):
     """Raised when a CSV parsing error occurs.
 
     This exception is raised when the CSV file is malformed or cannot be parsed.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from rapcsv import Reader, CSVError
+
+        try:
+            reader = Reader("malformed.csv")
+            row = await reader.read_row()
+        except CSVError as e:
+            print(f"CSV parsing error: {e}")
     """
 
     ...
@@ -430,6 +446,18 @@ class CSVFieldCountError(Exception):
 
     This exception is raised when strict mode is enabled and rows have
     inconsistent field counts.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from rapcsv import Reader, CSVFieldCountError
+
+        try:
+            reader = Reader("data.csv", strict=True)
+            row = await reader.read_row()
+        except CSVFieldCountError as e:
+            print(f"Field count mismatch: {e}")
     """
 
     ...

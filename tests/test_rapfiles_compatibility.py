@@ -9,16 +9,18 @@ tests verify path-based interoperability. Future versions may support direct
 file handle integration.
 """
 
-import pytest
-import tempfile
 import os
+import tempfile
 from pathlib import Path
 
-from rapcsv import Reader, Writer, AsyncDictReader, AsyncDictWriter
+import pytest
+
+from rapcsv import AsyncDictReader, AsyncDictWriter, Reader, Writer
 
 # Try importing rapfiles for compatibility tests (optional)
 try:
     import rapfiles
+
     RAPFILES_AVAILABLE = True
 except ImportError:
     RAPFILES_AVAILABLE = False
@@ -27,6 +29,7 @@ except ImportError:
 # ============================================================================
 # Basic Interoperability Tests
 # ============================================================================
+
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(not RAPFILES_AVAILABLE, reason="rapfiles not installed")
@@ -46,13 +49,13 @@ async def test_rapfiles_write_rapcsv_read():
         reader = Reader(test_file)
         row1 = await reader.read_row()
         assert row1 == ["name", "age", "city"]
-        
+
         row2 = await reader.read_row()
         assert row2 == ["Alice", "30", "New York"]
-        
+
         row3 = await reader.read_row()
         assert row3 == ["Bob", "25", "London"]
-        
+
         # EOF
         row4 = await reader.read_row()
         assert row4 == []
@@ -79,7 +82,7 @@ async def test_rapcsv_write_rapfiles_read():
         # Read using rapfiles and verify content
         async with rapfiles.open(test_file, "r") as f:
             content = await f.read()
-        
+
         # Handle different line endings (rapcsv may write \r\n on some systems)
         lines = content.strip().replace("\r\n", "\n").replace("\r", "\n").split("\n")
         assert len(lines) == 3
@@ -110,7 +113,7 @@ async def test_rapfiles_dictreader_interop():
         row1 = await reader.read_row()
         assert isinstance(row1, dict)
         assert row1 == {"name": "Alice", "age": "30", "city": "New York"}
-        
+
         row2 = await reader.read_row()
         assert row2 == {"name": "Bob", "age": "25", "city": "London"}
     finally:
@@ -136,7 +139,7 @@ async def test_rapcsv_dictwriter_rapfiles_read():
         # Read using rapfiles and verify
         async with rapfiles.open(test_file, "r") as f:
             content = await f.read()
-        
+
         # Handle different line endings
         lines = content.strip().replace("\r\n", "\n").split("\n")
         assert len(lines) == 3
@@ -153,7 +156,7 @@ async def test_rapcsv_dictwriter_rapfiles_read():
 async def test_rapfiles_path_objects():
     """Test that rapcsv works with Path objects from rapfiles operations."""
     import tempfile
-    
+
     with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as f:
         test_file_path = Path(f.name)
         test_file_str = str(test_file_path)
@@ -168,7 +171,7 @@ async def test_rapfiles_path_objects():
         reader = Reader(str(test_file_path))
         row1 = await reader.read_row()
         assert row1 == ["col1", "col2"]
-        
+
         row2 = await reader.read_row()
         assert row2 == ["val1", "val2"]
     finally:
@@ -195,10 +198,10 @@ async def test_rapfiles_quoted_fields():
         reader = Reader(test_file)
         row1 = await reader.read_row()
         assert row1 == ["name", "description"]
-        
+
         row2 = await reader.read_row()
         assert row2 == ["Alice", "Person, age 30"]
-        
+
         row3 = await reader.read_row()
         # CSV parser converts "" back to " when inside quoted fields
         assert row3 == ["Bob", 'Person with "quotes"']
@@ -230,7 +233,7 @@ async def test_rapfiles_roundtrip_dictreader():
             if not row:  # Skip empty dicts (EOF indicator)
                 break
             rows.append(row)
-        
+
         assert len(rows) == 2
         assert rows[0] == {"name": "Alice", "age": "30"}
         assert rows[1] == {"name": "Bob", "age": "25"}
@@ -244,7 +247,7 @@ async def test_rapfiles_roundtrip_dictreader():
         # Step 4: Verify with rapfiles
         async with rapfiles.open(output_file, "r") as f:
             content = await f.read()
-        
+
         # Handle different line endings
         lines = content.strip().replace("\r\n", "\n").split("\n")
         assert len(lines) == 3
