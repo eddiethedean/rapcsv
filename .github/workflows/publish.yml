@@ -151,6 +151,12 @@ jobs:
         with:
           platforms: arm64
 
+      - name: Set up Python ${{ matrix.python }} (Linux - for testing)
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
       - name: Build wheel (Linux - manylinux)
         if: matrix.os == 'ubuntu-latest'
         env:
