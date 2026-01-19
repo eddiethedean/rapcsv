@@ -1,6 +1,6 @@
 #![allow(non_local_definitions)] // False positive from pyo3 macros
 
-use csv::{ReaderBuilder, WriterBuilder, Terminator, QuoteStyle};
+use csv::{QuoteStyle, ReaderBuilder, Terminator, WriterBuilder};
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
@@ -21,8 +21,8 @@ create_exception!(_rapcsv, CSVFieldCountError, PyException);
 enum FileSource {
     Path(String),
     Handle {
-        file: Py<PyAny>,  // Python file-like object with async read/write methods
-        event_loop: Py<PyAny>,  // Event loop reference for run_coroutine_threadsafe
+        file: Py<PyAny>,       // Python file-like object with async read/write methods
+        event_loop: Py<PyAny>, // Event loop reference for run_coroutine_threadsafe
     },
 }
 
@@ -30,27 +30,28 @@ enum FileSource {
 // We'll avoid cloning FileSource and instead clone the path/handle separately where needed
 
 /// Read from a Python async file-like object.
-/// 
+///
 /// Calls the file's `read(size)` method and awaits the coroutine using spawn_blocking
 /// to avoid blocking the Tokio runtime while running Python async code.
 /// Uses `asyncio.run_coroutine_threadsafe()` to schedule on the original event loop.
 async fn read_from_python_file(
     file_handle: Py<PyAny>,
-    event_loop: Py<PyAny>,  // Event loop reference for run_coroutine_threadsafe
+    event_loop: Py<PyAny>, // Event loop reference for run_coroutine_threadsafe
     size: usize,
 ) -> PyResult<String> {
     // Use spawn_blocking to run Python async code without blocking Tokio
     let result = tokio::task::spawn_blocking(move || {
-        #[allow(deprecated)] // Python::with_gil is still required in blocking contexts (spawn_blocking)
+        #[allow(deprecated)]
+        // Python::with_gil is still required in blocking contexts (spawn_blocking)
         Python::with_gil(|py| -> PyResult<String> {
             let handle_bound = file_handle.bind(py);
             let loop_bound = event_loop.bind(py);
-            
+
             // Use the helper function to call read on the event loop thread
             // This avoids calling rapfiles.read() from a thread without an event loop
             let rapcsv_mod = py.import("rapcsv")?;
             let helper_func = rapcsv_mod.getattr("_call_file_method_threadsafe")?;
-            
+
             // Call the helper function which schedules read() on the event loop
             // Pass arguments as positional: file_handle, method_name, event_loop, *args
             let result = helper_func.call1((handle_bound, "read", loop_bound, size))?;
@@ -59,46 +60,51 @@ async fn read_from_python_file(
         })
     })
     .await
-    .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
-        "Failed to await Python coroutine: {e}"
-    )))??;
-    
+    .map_err(|e| {
+        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+            "Failed to await Python coroutine: {e}"
+        ))
+    })??;
+
     Ok(result)
 }
 
 /// Write to a Python async file-like object.
-/// 
+///
 /// Calls the file's `write(data)` method and awaits the coroutine using spawn_blocking.
 /// Uses `asyncio.run_coroutine_threadsafe()` to schedule on the original event loop.
 async fn write_to_python_file(
     file_handle: Py<PyAny>,
-    event_loop: Py<PyAny>,  // Event loop reference for run_coroutine_threadsafe
+    event_loop: Py<PyAny>, // Event loop reference for run_coroutine_threadsafe
     data: String,
 ) -> PyResult<()> {
     // Use spawn_blocking to run Python async code without blocking Tokio
     tokio::task::spawn_blocking(move || {
-        #[allow(deprecated)] // Python::with_gil is still required in blocking contexts (spawn_blocking)
+        #[allow(deprecated)]
+        // Python::with_gil is still required in blocking contexts (spawn_blocking)
         Python::with_gil(|py| -> PyResult<()> {
             let handle_bound = file_handle.bind(py);
             let loop_bound = event_loop.bind(py);
-            
+
             // Use the helper function to call write on the event loop thread
             // This avoids calling rapfiles.write() from a thread without an event loop
             let rapcsv_mod = py.import("rapcsv")?;
             let helper_func = rapcsv_mod.getattr("_call_file_method_threadsafe")?;
-            
+
             // Call the helper function which schedules write() on the event loop
             // Pass arguments as positional: file_handle, method_name, event_loop, *args
             helper_func.call1((handle_bound, "write", loop_bound, data))?;
-            
+
             Ok(())
         })
     })
     .await
-    .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
-        "Failed to await Python coroutine: {e}"
-    )))??;
-    
+    .map_err(|e| {
+        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+            "Failed to await Python coroutine: {e}"
+        ))
+    })??;
+
     Ok(())
 }
 
@@ -112,11 +118,9 @@ fn get_event_loop_for_file_handle(
     #[allow(deprecated)] // Python::with_gil is still required in this context
     Python::with_gil(|py| -> PyResult<Py<PyAny>> {
         let loop_guard = event_loop.lock().map_err(|_| {
-            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                "Failed to lock event loop"
-            )
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Failed to lock event loop")
         })?;
-        
+
         // Event loop should always be stored for file handles
         loop_guard.as_ref().ok_or_else(|| {
             PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
@@ -135,7 +139,7 @@ fn await_wrapper_internal(py: Python<'_>, awaitable: Bound<'_, PyAny>) -> PyResu
     // This avoids exec/eval entirely by using a pre-defined Python function
     let rapcsv_mod = py.import("rapcsv")?;
     let wrapper_func = rapcsv_mod.getattr("_await_wrapper")?;
-    
+
     // Call the Python wrapper function with our awaitable
     let coro = wrapper_func.call1((awaitable,))?;
     Ok(coro.unbind())
@@ -144,12 +148,15 @@ fn await_wrapper_internal(py: Python<'_>, awaitable: Bound<'_, PyAny>) -> PyResu
 /// Wrap a Python awaitable (coroutine or Future) into a coroutine for run_coroutine_threadsafe.
 /// This is safer than using exec/eval - we use Python's built-in type checking.
 #[allow(dead_code)] // Kept for potential future use
-fn wrap_awaitable_into_coroutine<'py>(py: Python<'py>, awaitable: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+fn wrap_awaitable_into_coroutine<'py>(
+    py: Python<'py>,
+    awaitable: Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
     // Always use the wrapper function from rapcsv/__init__.py
     // It handles both coroutines and Futures internally, avoiding type issues
     let rapcsv_mod = py.import("rapcsv")?;
     let wrapper_func = rapcsv_mod.getattr("_await_wrapper")?;
-    
+
     // Call the Python wrapper function with our awaitable
     let coro = wrapper_func.call1((awaitable,))?;
     Ok(coro)
@@ -216,7 +223,7 @@ impl DialectConfig {
         let delimiter = delimiter
             .and_then(|s| s.as_bytes().first().copied())
             .unwrap_or(b',');
-        
+
         if delimiter.is_ascii_whitespace() {
             return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
                 "delimiter cannot be whitespace",
@@ -226,27 +233,25 @@ impl DialectConfig {
         let quotechar = quotechar
             .and_then(|s| s.as_bytes().first().copied())
             .unwrap_or(b'"');
-        
+
         let escapechar = escapechar.and_then(|s| s.as_bytes().first().copied());
 
         let quoting = match quoting {
-            Some(0) => QuoteStyle::Never,        // QUOTE_NONE
-            Some(1) => QuoteStyle::Necessary,    // QUOTE_MINIMAL
-            Some(2) => QuoteStyle::Always,       // QUOTE_ALL
-            Some(3) => QuoteStyle::NonNumeric,   // QUOTE_NONNUMERIC
-            Some(4) => QuoteStyle::Always,       // QUOTE_NOTNULL - map to Always (quote all non-null fields)
-            Some(5) => QuoteStyle::Always,       // Reserved for future use
-            Some(6) => QuoteStyle::NonNumeric,   // QUOTE_STRINGS - map to NonNumeric (quote string fields)
-            _ => QuoteStyle::Necessary,          // Default to QUOTE_MINIMAL
+            Some(0) => QuoteStyle::Never,      // QUOTE_NONE
+            Some(1) => QuoteStyle::Necessary,  // QUOTE_MINIMAL
+            Some(2) => QuoteStyle::Always,     // QUOTE_ALL
+            Some(3) => QuoteStyle::NonNumeric, // QUOTE_NONNUMERIC
+            Some(4) => QuoteStyle::Always, // QUOTE_NOTNULL - map to Always (quote all non-null fields)
+            Some(5) => QuoteStyle::Always, // Reserved for future use
+            Some(6) => QuoteStyle::NonNumeric, // QUOTE_STRINGS - map to NonNumeric (quote string fields)
+            _ => QuoteStyle::Necessary,        // Default to QUOTE_MINIMAL
         };
 
         let lineterminator = match lineterminator {
             Some("\r\n") | Some("\\r\\n") => Terminator::CRLF,
             Some("\n") | Some("\\n") => Terminator::Any(b'\n'),
             Some("\r") | Some("\\r") => Terminator::Any(b'\r'),
-            Some(custom) if custom.len() == 1 => {
-                Terminator::Any(custom.as_bytes()[0])
-            }
+            Some(custom) if custom.len() == 1 => Terminator::Any(custom.as_bytes()[0]),
             _ => Terminator::CRLF, // Default
         };
 
@@ -303,7 +308,7 @@ impl DialectConfig {
         // The quoting style is primarily controlled by quote character and double_quote behavior
 
         if let Some(esc) = self.escapechar {
-            builder.escape(esc);  // WriterBuilder.escape() takes u8, not Option<u8>
+            builder.escape(esc); // WriterBuilder.escape() takes u8, not Option<u8>
         }
 
         if !self.double_quote {
@@ -335,10 +340,10 @@ fn _rapcsv(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Register exception classes (required for create_exception! to be accessible from Python)
     m.add("CSVError", py.get_type::<CSVError>())?;
     m.add("CSVFieldCountError", py.get_type::<CSVFieldCountError>())?;
-    
+
     // Register the wrapper function (no exec/eval needed - uses pyo3-async-runtimes)
     m.add_function(wrap_pyfunction!(await_wrapper_internal, m)?)?;
-    
+
     Ok(())
 }
 
@@ -369,15 +374,15 @@ fn _rapcsv(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
 /// ```
 #[pyclass]
 struct Reader {
-    source: FileSource,  // Either Path(String) or Handle {file, event_loop}
-    path: String,  // Keep for backward compatibility and error messages
-    file: Arc<Mutex<Option<BufReader<File>>>>,  // Only used when source is Path
-    file_handle: Arc<StdMutex<Option<Py<PyAny>>>>,  // Python file handle when source is Handle (std::sync::Mutex for blocking locks in spawn_blocking)
-    event_loop: Arc<StdMutex<Option<Py<PyAny>>>>,  // Event loop reference for run_coroutine_threadsafe
+    source: FileSource, // Either Path(String) or Handle {file, event_loop}
+    path: String,       // Keep for backward compatibility and error messages
+    file: Arc<Mutex<Option<BufReader<File>>>>, // Only used when source is Path
+    file_handle: Arc<StdMutex<Option<Py<PyAny>>>>, // Python file handle when source is Handle (std::sync::Mutex for blocking locks in spawn_blocking)
+    event_loop: Arc<StdMutex<Option<Py<PyAny>>>>, // Event loop reference for run_coroutine_threadsafe
     buffer: Arc<Mutex<String>>,
     buffer_start: Arc<Mutex<usize>>, // Start position in buffer for next parse
-    position: Arc<Mutex<usize>>, // Record index (0-based)
-    line_num: Arc<Mutex<usize>>, // Line number (1-based, accounting for multi-line records)
+    position: Arc<Mutex<usize>>,     // Record index (0-based)
+    line_num: Arc<Mutex<usize>>,     // Line number (1-based, accounting for multi-line records)
     dialect: DialectConfig,
     read_size: usize, // Configurable chunk size for reading
     #[allow(dead_code)] // Captured at instantiation for future validation
@@ -430,36 +435,43 @@ impl Reader {
         field_size_limit: Option<usize>,
     ) -> PyResult<Self> {
         // Try to extract as string first (file path)
-        let (source, path, file_handle, event_loop) = if let Ok(path_str) = path_or_handle.extract::<String>() {
-            validate_path(&path_str)?;
-            (FileSource::Path(path_str.clone()), path_str, Arc::new(StdMutex::new(None)), Arc::new(StdMutex::new(None)))
-        } else {
-            // Assume it's a file-like object
-            let handle = path_or_handle.clone().unbind();
-            // For file handles, use a placeholder path for error messages
-            let placeholder_path = "<file_handle>".to_string();
-            
-            // Get the running event loop (required for aiofiles/rapfiles handles)
-            // Must be available during construction since we're in Python's context
-            let asyncio = py.import("asyncio")?;
-            let loop_obj = asyncio.call_method0("get_running_loop")
-                .map_err(|_| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                    "No running event loop found. File handles require a running event loop. \
-                     Use 'async with' or ensure asyncio.run() has been called."
-                ))?;
-            
-            let handle_clone = handle.clone_ref(py);
-            let loop_clone = loop_obj.unbind();
-            (
-                FileSource::Handle {
-                    file: handle_clone.clone_ref(py),
-                    event_loop: loop_clone.clone_ref(py),
-                },
-                placeholder_path,
-                Arc::new(StdMutex::new(Some(handle_clone))),
-                Arc::new(StdMutex::new(Some(loop_clone))),  // Always store the loop
-            )
-        };
+        let (source, path, file_handle, event_loop) =
+            if let Ok(path_str) = path_or_handle.extract::<String>() {
+                validate_path(&path_str)?;
+                (
+                    FileSource::Path(path_str.clone()),
+                    path_str,
+                    Arc::new(StdMutex::new(None)),
+                    Arc::new(StdMutex::new(None)),
+                )
+            } else {
+                // Assume it's a file-like object
+                let handle = path_or_handle.clone().unbind();
+                // For file handles, use a placeholder path for error messages
+                let placeholder_path = "<file_handle>".to_string();
+
+                // Get the running event loop (required for aiofiles/rapfiles handles)
+                // Must be available during construction since we're in Python's context
+                let asyncio = py.import("asyncio")?;
+                let loop_obj = asyncio.call_method0("get_running_loop").map_err(|_| {
+                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                        "No running event loop found. File handles require a running event loop. \
+                     Use 'async with' or ensure asyncio.run() has been called.",
+                    )
+                })?;
+
+                let handle_clone = handle.clone_ref(py);
+                let loop_clone = loop_obj.unbind();
+                (
+                    FileSource::Handle {
+                        file: handle_clone.clone_ref(py),
+                        event_loop: loop_clone.clone_ref(py),
+                    },
+                    placeholder_path,
+                    Arc::new(StdMutex::new(Some(handle_clone))),
+                    Arc::new(StdMutex::new(Some(loop_clone))), // Always store the loop
+                )
+            };
 
         let dialect = DialectConfig::from_python(
             delimiter,
@@ -491,10 +503,11 @@ impl Reader {
     #[getter]
     fn line_num(&self) -> PyResult<usize> {
         Python::attach(|_py| {
-            Ok(*self.line_num.try_lock()
-                .map_err(|_| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                    "Cannot access line_num concurrently"
-                ))?)
+            Ok(*self.line_num.try_lock().map_err(|_| {
+                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                    "Cannot access line_num concurrently",
+                )
+            })?)
         })
     }
 
@@ -519,7 +532,6 @@ impl Reader {
             // But that function has issues too. Let's use a simpler approach:
             // Extract once per call in the async block, accepting the limitation
             let future = async move {
-
                 // Get current position
                 let current_pos = {
                     let pos_guard = position.lock().await;
@@ -543,7 +555,8 @@ impl Reader {
                         let mut csv_reader_builder = ReaderBuilder::new();
                         csv_reader_builder.has_headers(false);
                         dialect.apply_to_reader(&mut csv_reader_builder, field_size_limit);
-                        let mut csv_reader = csv_reader_builder.from_reader(available_data.as_bytes());
+                        let mut csv_reader =
+                            csv_reader_builder.from_reader(available_data.as_bytes());
 
                         // available_data starts after buffer_start, which means records before current_pos
                         // are already consumed. So we should read the next record (at current_pos) directly
@@ -572,12 +585,16 @@ impl Reader {
                                     // Get the byte position after reading this record
                                     // The csv_reader position() gives us where we are after the iterator consumed the record
                                     let consumed_in_slice = csv_reader.position().byte() as usize;
-                                    
+
                                     // Count newlines in the consumed record for accurate line_num tracking
                                     // This handles multi-line records (quoted fields with newlines)
                                     let record_end = consumed_in_slice.min(available_data.len());
                                     let record_text = &available_data[..record_end];
-                                    let newline_count = record_text.as_bytes().iter().filter(|&&b| b == b'\n').count();
+                                    let newline_count = record_text
+                                        .as_bytes()
+                                        .iter()
+                                        .filter(|&&b| b == b'\n')
+                                        .count();
 
                                     // Update position and line_num
                                     {
@@ -638,19 +655,20 @@ impl Reader {
                         }
                         let reader = file_guard.as_mut().unwrap();
                         let mut chunk = vec![0u8; chunk_size];
-                    match reader.read(&mut chunk).await {
+                        match reader.read(&mut chunk).await {
                             Ok(0) => Ok(("".to_string(), true)), // EOF
                             Ok(n) => {
                                 chunk.truncate(n);
-                                let chunk_str = String::from_utf8(chunk)
-                                    .map_err(|_| PyErr::new::<pyo3::exceptions::PyIOError, _>(
-                                        "Invalid UTF-8 in CSV file"
-                                    ))?;
+                                let chunk_str = String::from_utf8(chunk).map_err(|_| {
+                                    PyErr::new::<pyo3::exceptions::PyIOError, _>(
+                                        "Invalid UTF-8 in CSV file",
+                                    )
+                                })?;
                                 Ok((chunk_str, false)) // Data read
                             }
                             Err(e) => Err(PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
                                 "Failed to read file {path}: {e}"
-                            )))
+                            ))),
                         }
                     } else {
                         // Use Python file handle for Handle sources
@@ -659,50 +677,54 @@ impl Reader {
                         let file_handle_clone = file_handle.clone();
                         let event_loop_clone = event_loop.clone();
                         let (handle_py, loop_py) = tokio::task::spawn_blocking(move || {
-                            #[allow(deprecated)] // Python::with_gil is still required in blocking contexts (spawn_blocking)
+                            #[allow(deprecated)]
+                            // Python::with_gil is still required in blocking contexts (spawn_blocking)
                             Python::with_gil(|py| -> PyResult<(Py<PyAny>, Py<PyAny>)> {
                                 // Extract file handle
                                 let handle_guard = file_handle_clone.lock().map_err(|_| {
                                     PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                                        "Failed to lock file handle"
+                                        "Failed to lock file handle",
                                     )
                                 })?;
                                 let handle = handle_guard.as_ref().ok_or_else(|| {
                                     PyErr::new::<pyo3::exceptions::PyIOError, _>(
-                                        "File handle not available"
+                                        "File handle not available",
                                     )
                                 })?;
-                                
+
                                 // Extract event loop
                                 let loop_guard = event_loop_clone.lock().map_err(|_| {
                                     PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                                        "Failed to lock event loop"
+                                        "Failed to lock event loop",
                                     )
                                 })?;
                                 let loop_obj = loop_guard.as_ref().ok_or_else(|| {
                                     PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                                        "Event loop not available"
+                                        "Event loop not available",
                                     )
                                 })?;
-                                
+
                                 Ok((handle.clone_ref(py), loop_obj.clone_ref(py)))
                             })
                         })
                         .await
-                        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
-                            "Failed to extract file handle or event loop: {e}"
-                        )))??;
-                        
+                        .map_err(|e| {
+                            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                                "Failed to extract file handle or event loop: {e}"
+                            ))
+                        })??;
+
                         // Now use the helper function with the extracted handle and loop
-                        let chunk_str = read_from_python_file(handle_py, loop_py, chunk_size).await?;
-                        
+                        let chunk_str =
+                            read_from_python_file(handle_py, loop_py, chunk_size).await?;
+
                         if chunk_str.is_empty() {
                             Ok(("".to_string(), true)) // EOF
                         } else {
                             Ok((chunk_str, false)) // Data read
                         }
                     };
-                    
+
                     match chunk_result {
                         Ok((_chunk_str, true)) => {
                             // EOF
@@ -721,7 +743,8 @@ impl Reader {
                             let mut csv_reader_builder = ReaderBuilder::new();
                             csv_reader_builder.has_headers(false);
                             dialect.apply_to_reader(&mut csv_reader_builder, field_size_limit);
-                            let mut csv_reader = csv_reader_builder.from_reader(available_data.as_bytes());
+                            let mut csv_reader =
+                                csv_reader_builder.from_reader(available_data.as_bytes());
 
                             // available_data starts after consumed records, so read first record
                             let mut records_iter = csv_reader.records();
@@ -730,14 +753,18 @@ impl Reader {
                                 Some(Ok(record)) => {
                                     let row: Vec<String> =
                                         record.iter().map(|s| s.to_string()).collect();
-                                    
+
                                     // Count newlines for accurate line_num tracking
                                     let csv_position = csv_reader.position();
                                     let consumed_in_slice = csv_position.byte() as usize;
                                     let record_end = consumed_in_slice.min(available_data.len());
                                     let record_text = &available_data[..record_end];
-                                    let newline_count = record_text.as_bytes().iter().filter(|&&b| b == b'\n').count();
-                                    
+                                    let newline_count = record_text
+                                        .as_bytes()
+                                        .iter()
+                                        .filter(|&&b| b == b'\n')
+                                        .count();
+
                                     {
                                         let mut pos_guard = position.lock().await;
                                         *pos_guard = current_pos + 1;
@@ -770,7 +797,7 @@ impl Reader {
                         }
                         Ok((chunk_str, false)) => {
                             // Append chunk to buffer
-                                    buffer_guard.push_str(&chunk_str);
+                            buffer_guard.push_str(&chunk_str);
                         }
                         Err(e) => {
                             return Err(e);
@@ -788,7 +815,7 @@ impl Reader {
     }
 
     /// Async iterator next - returns next row or raises StopAsyncIteration.
-    /// 
+    ///
     /// Note: For proper StopAsyncIteration handling, this is best used via Python's
     /// async for syntax, which handles empty results correctly.
     fn __anext__(self_: PyRef<Self>) -> PyResult<Py<PyAny>> {
@@ -814,7 +841,7 @@ impl Reader {
         Python::attach(|py| {
             let future = async move {
                 let mut rows: Vec<Vec<String>> = Vec::new();
-                
+
                 // Get or open the file handle (once) - only for path-based sources
                 if is_path {
                     let mut file_guard = file.lock().await;
@@ -831,7 +858,6 @@ impl Reader {
 
                 // Read n rows in a loop
                 for _ in 0..n {
-
                     let current_pos = {
                         let pos_guard = position.lock().await;
                         *pos_guard
@@ -852,7 +878,8 @@ impl Reader {
                             let mut csv_reader_builder = ReaderBuilder::new();
                             csv_reader_builder.has_headers(false);
                             dialect.apply_to_reader(&mut csv_reader_builder, field_size_limit);
-                            let mut csv_reader = csv_reader_builder.from_reader(available_data.as_bytes());
+                            let mut csv_reader =
+                                csv_reader_builder.from_reader(available_data.as_bytes());
                             let mut records_iter = csv_reader.records();
 
                             if let Some(result) = records_iter.next() {
@@ -861,12 +888,18 @@ impl Reader {
                                         let row: Vec<String> =
                                             record.iter().map(|s| s.to_string()).collect();
 
-                                        let consumed_in_slice = csv_reader.position().byte() as usize;
-                                        
+                                        let consumed_in_slice =
+                                            csv_reader.position().byte() as usize;
+
                                         // Count newlines in the consumed record for accurate line_num tracking
-                                        let record_end = consumed_in_slice.min(available_data.len());
+                                        let record_end =
+                                            consumed_in_slice.min(available_data.len());
                                         let record_text = &available_data[..record_end];
-                                        let newline_count = record_text.as_bytes().iter().filter(|&&b| b == b'\n').count();
+                                        let newline_count = record_text
+                                            .as_bytes()
+                                            .iter()
+                                            .filter(|&&b| b == b'\n')
+                                            .count();
 
                                         {
                                             let mut pos_guard = position.lock().await;
@@ -894,8 +927,8 @@ impl Reader {
                                         rows.push(row);
                                         row_found = true;
                                         break;
-                                }
-                                Err(_) => {
+                                    }
+                                    Err(_) => {
                                         // Continue reading
                                     }
                                 }
@@ -920,61 +953,66 @@ impl Reader {
                                 Ok(0) => Ok(("".to_string(), true)), // EOF
                                 Ok(n) => {
                                     chunk.truncate(n);
-                                    let chunk_str = String::from_utf8(chunk)
-                                        .map_err(|_| PyErr::new::<pyo3::exceptions::PyIOError, _>(
-                                            "Invalid UTF-8 in CSV file"
-                                        ))?;
+                                    let chunk_str = String::from_utf8(chunk).map_err(|_| {
+                                        PyErr::new::<pyo3::exceptions::PyIOError, _>(
+                                            "Invalid UTF-8 in CSV file",
+                                        )
+                                    })?;
                                     Ok((chunk_str, false)) // Data read
                                 }
-                                Err(e) => Err(PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
-                                    "Failed to read file {path}: {e}"
-                                )))
+                                Err(e) => Err(PyErr::new::<pyo3::exceptions::PyIOError, _>(
+                                    format!("Failed to read file {path}: {e}"),
+                                )),
                             }
                         } else {
-                        // Use Python file handle for Handle sources
-                        // Extract both file handle and event loop in a single spawn_blocking
-                        // This ensures we get them before moving into async context
-                        let file_handle_clone = file_handle.clone();
-                        let event_loop_clone = event_loop.clone();
-                        let (handle_py, loop_py) = tokio::task::spawn_blocking(move || {
-                            #[allow(deprecated)] // Python::with_gil is still required in blocking contexts (spawn_blocking)
-                            Python::with_gil(|py| -> PyResult<(Py<PyAny>, Py<PyAny>)> {
-                                // Extract file handle
-                                let handle_guard = file_handle_clone.lock().map_err(|_| {
-                                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                                        "Failed to lock file handle"
-                                    )
-                                })?;
-                                let handle = handle_guard.as_ref().ok_or_else(|| {
-                                    PyErr::new::<pyo3::exceptions::PyIOError, _>(
-                                        "File handle not available"
-                                    )
-                                })?;
-                                
-                                // Extract event loop
-                                let loop_guard = event_loop_clone.lock().map_err(|_| {
-                                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                                        "Failed to lock event loop"
-                                    )
-                                })?;
-                                let loop_obj = loop_guard.as_ref().ok_or_else(|| {
-                                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                                        "Event loop not available"
-                                    )
-                                })?;
-                                
-                                Ok((handle.clone_ref(py), loop_obj.clone_ref(py)))
+                            // Use Python file handle for Handle sources
+                            // Extract both file handle and event loop in a single spawn_blocking
+                            // This ensures we get them before moving into async context
+                            let file_handle_clone = file_handle.clone();
+                            let event_loop_clone = event_loop.clone();
+                            let (handle_py, loop_py) = tokio::task::spawn_blocking(move || {
+                                #[allow(deprecated)]
+                                // Python::with_gil is still required in blocking contexts (spawn_blocking)
+                                Python::with_gil(|py| -> PyResult<(Py<PyAny>, Py<PyAny>)> {
+                                    // Extract file handle
+                                    let handle_guard = file_handle_clone.lock().map_err(|_| {
+                                        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                                            "Failed to lock file handle",
+                                        )
+                                    })?;
+                                    let handle = handle_guard.as_ref().ok_or_else(|| {
+                                        PyErr::new::<pyo3::exceptions::PyIOError, _>(
+                                            "File handle not available",
+                                        )
+                                    })?;
+
+                                    // Extract event loop
+                                    let loop_guard = event_loop_clone.lock().map_err(|_| {
+                                        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                                            "Failed to lock event loop",
+                                        )
+                                    })?;
+                                    let loop_obj = loop_guard.as_ref().ok_or_else(|| {
+                                        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                                            "Event loop not available",
+                                        )
+                                    })?;
+
+                                    Ok((handle.clone_ref(py), loop_obj.clone_ref(py)))
+                                })
                             })
-                        })
-                        .await
-                        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
-                            "Failed to extract file handle or event loop: {e}"
-                        )))??;
-                        
-                        let chunk_str = read_from_python_file(handle_py, loop_py, chunk_size).await?;
-                        Ok((chunk_str.clone(), chunk_str.is_empty()))
+                            .await
+                            .map_err(|e| {
+                                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                                    "Failed to extract file handle or event loop: {e}"
+                                ))
+                            })??;
+
+                            let chunk_str =
+                                read_from_python_file(handle_py, loop_py, chunk_size).await?;
+                            Ok((chunk_str.clone(), chunk_str.is_empty()))
                         };
-                        
+
                         match chunk_result {
                             Ok((_chunk_str, true)) => {
                                 // EOF
@@ -992,26 +1030,33 @@ impl Reader {
                                 let mut csv_reader_builder = ReaderBuilder::new();
                                 csv_reader_builder.has_headers(false);
                                 dialect.apply_to_reader(&mut csv_reader_builder, None);
-                                let mut csv_reader = csv_reader_builder.from_reader(available_data.as_bytes());
+                                let mut csv_reader =
+                                    csv_reader_builder.from_reader(available_data.as_bytes());
                                 let mut records_iter = csv_reader.records();
 
                                 match records_iter.next() {
                                     Some(Ok(record)) => {
                                         let row: Vec<String> =
                                             record.iter().map(|s| s.to_string()).collect();
-                                        
-                                        let consumed_in_slice = csv_reader.position().byte() as usize;
-                                        
+
+                                        let consumed_in_slice =
+                                            csv_reader.position().byte() as usize;
+
                                         {
                                             let mut pos_guard = position.lock().await;
                                             *pos_guard = current_pos + 1;
                                         }
                                         {
                                             // Count newlines for accurate line_num tracking
-                                            let record_end = consumed_in_slice.min(available_data.len());
+                                            let record_end =
+                                                consumed_in_slice.min(available_data.len());
                                             let record_text = &available_data[..record_end];
-                                            let newline_count = record_text.as_bytes().iter().filter(|&&b| b == b'\n').count();
-                                            
+                                            let newline_count = record_text
+                                                .as_bytes()
+                                                .iter()
+                                                .filter(|&&b| b == b'\n')
+                                                .count();
+
                                             let mut line_num_guard = line_num.lock().await;
                                             if newline_count > 0 {
                                                 *line_num_guard += newline_count;
@@ -1041,7 +1086,7 @@ impl Reader {
                                 // Append chunk to buffer
                                 buffer_guard.push_str(&chunk_str);
                             }
-                        Err(e) => {
+                            Err(e) => {
                                 return Err(e);
                             }
                         }
@@ -1090,7 +1135,6 @@ impl Reader {
 
                 // Skip n rows - parse but don't collect data
                 for _ in 0..n {
-
                     let current_pos = {
                         let pos_guard = position.lock().await;
                         *pos_guard
@@ -1111,19 +1155,26 @@ impl Reader {
                             let mut csv_reader_builder = ReaderBuilder::new();
                             csv_reader_builder.has_headers(false);
                             dialect.apply_to_reader(&mut csv_reader_builder, field_size_limit);
-                            let mut csv_reader = csv_reader_builder.from_reader(available_data.as_bytes());
+                            let mut csv_reader =
+                                csv_reader_builder.from_reader(available_data.as_bytes());
                             let mut records_iter = csv_reader.records();
 
                             if let Some(result) = records_iter.next() {
                                 match result {
                                     Ok(_record) => {
                                         // Skip the actual data - just update position tracking
-                                        let consumed_in_slice = csv_reader.position().byte() as usize;
-                                        
+                                        let consumed_in_slice =
+                                            csv_reader.position().byte() as usize;
+
                                         // Count newlines in the consumed record for accurate line_num tracking
-                                        let record_end = consumed_in_slice.min(available_data.len());
+                                        let record_end =
+                                            consumed_in_slice.min(available_data.len());
                                         let record_text = &available_data[..record_end];
-                                        let newline_count = record_text.as_bytes().iter().filter(|&&b| b == b'\n').count();
+                                        let newline_count = record_text
+                                            .as_bytes()
+                                            .iter()
+                                            .filter(|&&b| b == b'\n')
+                                            .count();
 
                                         {
                                             let mut pos_guard = position.lock().await;
@@ -1176,61 +1227,66 @@ impl Reader {
                                 Ok(0) => Ok(("".to_string(), true)), // EOF
                                 Ok(n) => {
                                     chunk.truncate(n);
-                                    let chunk_str = String::from_utf8(chunk)
-                                        .map_err(|_| PyErr::new::<pyo3::exceptions::PyIOError, _>(
-                                            "Invalid UTF-8 in CSV file"
-                                        ))?;
+                                    let chunk_str = String::from_utf8(chunk).map_err(|_| {
+                                        PyErr::new::<pyo3::exceptions::PyIOError, _>(
+                                            "Invalid UTF-8 in CSV file",
+                                        )
+                                    })?;
                                     Ok((chunk_str, false)) // Data read
                                 }
-                                Err(e) => Err(PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
-                                "Failed to read file {path}: {e}"
-                                )))
+                                Err(e) => Err(PyErr::new::<pyo3::exceptions::PyIOError, _>(
+                                    format!("Failed to read file {path}: {e}"),
+                                )),
                             }
                         } else {
-                        // Use Python file handle for Handle sources
-                        // Extract both file handle and event loop in a single spawn_blocking
-                        // This ensures we get them before moving into async context
-                        let file_handle_clone = file_handle.clone();
-                        let event_loop_clone = event_loop.clone();
-                        let (handle_py, loop_py) = tokio::task::spawn_blocking(move || {
-                            #[allow(deprecated)] // Python::with_gil is still required in blocking contexts (spawn_blocking)
-                            Python::with_gil(|py| -> PyResult<(Py<PyAny>, Py<PyAny>)> {
-                                // Extract file handle
-                                let handle_guard = file_handle_clone.lock().map_err(|_| {
-                                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                                        "Failed to lock file handle"
-                                    )
-                                })?;
-                                let handle = handle_guard.as_ref().ok_or_else(|| {
-                                    PyErr::new::<pyo3::exceptions::PyIOError, _>(
-                                        "File handle not available"
-                                    )
-                                })?;
-                                
-                                // Extract event loop
-                                let loop_guard = event_loop_clone.lock().map_err(|_| {
-                                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                                        "Failed to lock event loop"
-                                    )
-                                })?;
-                                let loop_obj = loop_guard.as_ref().ok_or_else(|| {
-                                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                                        "Event loop not available"
-                                    )
-                                })?;
-                                
-                                Ok((handle.clone_ref(py), loop_obj.clone_ref(py)))
+                            // Use Python file handle for Handle sources
+                            // Extract both file handle and event loop in a single spawn_blocking
+                            // This ensures we get them before moving into async context
+                            let file_handle_clone = file_handle.clone();
+                            let event_loop_clone = event_loop.clone();
+                            let (handle_py, loop_py) = tokio::task::spawn_blocking(move || {
+                                #[allow(deprecated)]
+                                // Python::with_gil is still required in blocking contexts (spawn_blocking)
+                                Python::with_gil(|py| -> PyResult<(Py<PyAny>, Py<PyAny>)> {
+                                    // Extract file handle
+                                    let handle_guard = file_handle_clone.lock().map_err(|_| {
+                                        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                                            "Failed to lock file handle",
+                                        )
+                                    })?;
+                                    let handle = handle_guard.as_ref().ok_or_else(|| {
+                                        PyErr::new::<pyo3::exceptions::PyIOError, _>(
+                                            "File handle not available",
+                                        )
+                                    })?;
+
+                                    // Extract event loop
+                                    let loop_guard = event_loop_clone.lock().map_err(|_| {
+                                        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                                            "Failed to lock event loop",
+                                        )
+                                    })?;
+                                    let loop_obj = loop_guard.as_ref().ok_or_else(|| {
+                                        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                                            "Event loop not available",
+                                        )
+                                    })?;
+
+                                    Ok((handle.clone_ref(py), loop_obj.clone_ref(py)))
+                                })
                             })
-                        })
-                        .await
-                        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
-                            "Failed to extract file handle or event loop: {e}"
-                        )))??;
-                        
-                        let chunk_str = read_from_python_file(handle_py, loop_py, chunk_size).await?;
-                        Ok((chunk_str.clone(), chunk_str.is_empty()))
+                            .await
+                            .map_err(|e| {
+                                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                                    "Failed to extract file handle or event loop: {e}"
+                                ))
+                            })??;
+
+                            let chunk_str =
+                                read_from_python_file(handle_py, loop_py, chunk_size).await?;
+                            Ok((chunk_str.clone(), chunk_str.is_empty()))
                         };
-                        
+
                         match chunk_result {
                             Ok((_chunk_str, true)) => {
                                 // EOF
@@ -1248,24 +1304,31 @@ impl Reader {
                                 let mut csv_reader_builder = ReaderBuilder::new();
                                 csv_reader_builder.has_headers(false);
                                 dialect.apply_to_reader(&mut csv_reader_builder, None);
-                                let mut csv_reader = csv_reader_builder.from_reader(available_data.as_bytes());
+                                let mut csv_reader =
+                                    csv_reader_builder.from_reader(available_data.as_bytes());
                                 let mut records_iter = csv_reader.records();
 
                                 match records_iter.next() {
                                     Some(Ok(_record)) => {
                                         // Skip the data, just update position
-                                        let consumed_in_slice = csv_reader.position().byte() as usize;
-                                        
+                                        let consumed_in_slice =
+                                            csv_reader.position().byte() as usize;
+
                                         {
                                             let mut pos_guard = position.lock().await;
                                             *pos_guard = current_pos + 1;
                                         }
                                         {
                                             // Count newlines for accurate line_num tracking
-                                            let record_end = consumed_in_slice.min(available_data.len());
+                                            let record_end =
+                                                consumed_in_slice.min(available_data.len());
                                             let record_text = &available_data[..record_end];
-                                            let newline_count = record_text.as_bytes().iter().filter(|&&b| b == b'\n').count();
-                                            
+                                            let newline_count = record_text
+                                                .as_bytes()
+                                                .iter()
+                                                .filter(|&&b| b == b'\n')
+                                                .count();
+
                                             let mut line_num_guard = line_num.lock().await;
                                             if newline_count > 0 {
                                                 *line_num_guard += newline_count;
@@ -1357,17 +1420,17 @@ impl Reader {
 struct AsyncDictReader {
     #[allow(dead_code)] // Kept for compatibility, but we use stored state directly
     reader: Py<Reader>, // Keep for compatibility, but we'll use stored state
-    source: FileSource,  // Either Path(String) or Handle {file, event_loop}
-    path: String, // Store separately for direct access
+    source: FileSource, // Either Path(String) or Handle {file, event_loop}
+    path: String,       // Store separately for direct access
     file: Arc<Mutex<Option<BufReader<File>>>>, // Store separately - only used when source is Path
-    file_handle: Arc<StdMutex<Option<Py<PyAny>>>>,  // Python file handle when source is Handle
-    event_loop: Arc<StdMutex<Option<Py<PyAny>>>>,  // Event loop reference for run_coroutine_threadsafe
-    buffer: Arc<Mutex<String>>, // Store separately
-    buffer_start: Arc<Mutex<usize>>, // Store separately
-    position: Arc<Mutex<usize>>, // Store separately
-    line_num: Arc<Mutex<usize>>, // Store separately
-    dialect: DialectConfig, // Store separately
-    read_size: usize, // Store separately
+    file_handle: Arc<StdMutex<Option<Py<PyAny>>>>, // Python file handle when source is Handle
+    event_loop: Arc<StdMutex<Option<Py<PyAny>>>>, // Event loop reference for run_coroutine_threadsafe
+    buffer: Arc<Mutex<String>>,                   // Store separately
+    buffer_start: Arc<Mutex<usize>>,              // Store separately
+    position: Arc<Mutex<usize>>,                  // Store separately
+    line_num: Arc<Mutex<usize>>,                  // Store separately
+    dialect: DialectConfig,                       // Store separately
+    read_size: usize,                             // Store separately
     fieldnames: Arc<Mutex<Option<Vec<String>>>>,
     restkey: Option<String>,
     restval: Option<String>,
@@ -1417,36 +1480,43 @@ impl AsyncDictReader {
         read_size: Option<usize>,
     ) -> PyResult<Self> {
         // Try to extract as string first (file path)
-        let (source, path_clone, file_handle, event_loop) = if let Ok(path_str) = path_or_handle.extract::<String>() {
-            validate_path(&path_str)?;
-            (FileSource::Path(path_str.clone()), path_str, Arc::new(StdMutex::new(None)), Arc::new(StdMutex::new(None)))
-        } else {
-            // Assume it's a file-like object
-            let handle = path_or_handle.clone().unbind();
-            let placeholder_path = "<file_handle>".to_string();
-            
-            // Get the running event loop (required for aiofiles/rapfiles handles)
-            // Must be available during construction since we're in Python's context
-            let asyncio = py.import("asyncio")?;
-            let loop_obj = asyncio.call_method0("get_running_loop")
-                .map_err(|_| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                    "No running event loop found. File handles require a running event loop. \
-                     Use 'async with' or ensure asyncio.run() has been called."
-                ))?;
-            
-            let handle_clone = handle.clone_ref(py);
-            let loop_clone = loop_obj.unbind();
-            (
-                FileSource::Handle {
-                    file: handle_clone.clone_ref(py),
-                    event_loop: loop_clone.clone_ref(py),
-                },
-                placeholder_path,
-                Arc::new(StdMutex::new(Some(handle_clone))),
-                Arc::new(StdMutex::new(Some(loop_clone))),  // Always store the loop
-            )
-        };
-        
+        let (source, path_clone, file_handle, event_loop) =
+            if let Ok(path_str) = path_or_handle.extract::<String>() {
+                validate_path(&path_str)?;
+                (
+                    FileSource::Path(path_str.clone()),
+                    path_str,
+                    Arc::new(StdMutex::new(None)),
+                    Arc::new(StdMutex::new(None)),
+                )
+            } else {
+                // Assume it's a file-like object
+                let handle = path_or_handle.clone().unbind();
+                let placeholder_path = "<file_handle>".to_string();
+
+                // Get the running event loop (required for aiofiles/rapfiles handles)
+                // Must be available during construction since we're in Python's context
+                let asyncio = py.import("asyncio")?;
+                let loop_obj = asyncio.call_method0("get_running_loop").map_err(|_| {
+                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                        "No running event loop found. File handles require a running event loop. \
+                     Use 'async with' or ensure asyncio.run() has been called.",
+                    )
+                })?;
+
+                let handle_clone = handle.clone_ref(py);
+                let loop_clone = loop_obj.unbind();
+                (
+                    FileSource::Handle {
+                        file: handle_clone.clone_ref(py),
+                        event_loop: loop_clone.clone_ref(py),
+                    },
+                    placeholder_path,
+                    Arc::new(StdMutex::new(Some(handle_clone))),
+                    Arc::new(StdMutex::new(Some(loop_clone))), // Always store the loop
+                )
+            };
+
         let dialect = DialectConfig::from_python(
             delimiter,
             quotechar,
@@ -1458,7 +1528,7 @@ impl AsyncDictReader {
             double_quote,
         )?;
         let read_size_val = read_size.unwrap_or(8192);
-        
+
         // Create a Reader for compatibility (even though AsyncDictReader has its own file handling)
         let reader = Reader::new(
             py,
@@ -1474,7 +1544,7 @@ impl AsyncDictReader {
             read_size,
             None, // field_size_limit - not used in DictReader for now
         )?;
-        
+
         Ok(AsyncDictReader {
             reader: Py::new(py, reader)?,
             source,
@@ -1510,7 +1580,7 @@ impl AsyncDictReader {
         let fieldnames = Arc::clone(&self_.fieldnames);
         let restkey = self_.restkey.clone();
         let restval = self_.restval.clone();
-        
+
         Python::attach(|py| {
             let future = async move {
                 // Get or open the file handle - only for path-based sources
@@ -1537,16 +1607,17 @@ impl AsyncDictReader {
                         let fieldnames_guard = fieldnames.lock().await;
                         fieldnames_guard.is_none()
                     };
-                    
+
                     // Read one row
                     let current_pos = {
                         let pos_guard = position.lock().await;
                         *pos_guard
                     };
-                    
-                    #[allow(unused_assignments)] // row_vec is assigned in inner loop and used in outer loop
+
+                    #[allow(unused_assignments)]
+                    // row_vec is assigned in inner loop and used in outer loop
                     let mut row_vec: Option<Vec<String>> = None;
-                    
+
                     // Inner loop to read one CSV record
                     loop {
                         let available_data = if *buffer_start_guard < buffer_guard.len() {
@@ -1559,7 +1630,8 @@ impl AsyncDictReader {
                             let mut csv_reader_builder = ReaderBuilder::new();
                             csv_reader_builder.has_headers(false);
                             dialect.apply_to_reader(&mut csv_reader_builder, None);
-                            let mut csv_reader = csv_reader_builder.from_reader(available_data.as_bytes());
+                            let mut csv_reader =
+                                csv_reader_builder.from_reader(available_data.as_bytes());
                             let mut records_iter = csv_reader.records();
 
                             if let Some(result) = records_iter.next() {
@@ -1568,12 +1640,18 @@ impl AsyncDictReader {
                                         let row: Vec<String> =
                                             record.iter().map(|s| s.to_string()).collect();
 
-                                        let consumed_in_slice = csv_reader.position().byte() as usize;
-                                        
+                                        let consumed_in_slice =
+                                            csv_reader.position().byte() as usize;
+
                                         // Count newlines in the consumed record for accurate line_num tracking
-                                        let record_end = consumed_in_slice.min(available_data.len());
+                                        let record_end =
+                                            consumed_in_slice.min(available_data.len());
                                         let record_text = &available_data[..record_end];
-                                        let newline_count = record_text.as_bytes().iter().filter(|&&b| b == b'\n').count();
+                                        let newline_count = record_text
+                                            .as_bytes()
+                                            .iter()
+                                            .filter(|&&b| b == b'\n')
+                                            .count();
 
                                         {
                                             let mut pos_guard = position.lock().await;
@@ -1626,61 +1704,66 @@ impl AsyncDictReader {
                                 Ok(0) => Ok(("".to_string(), true)), // EOF
                                 Ok(n) => {
                                     chunk.truncate(n);
-                                    let chunk_str = String::from_utf8(chunk)
-                                        .map_err(|_| PyErr::new::<pyo3::exceptions::PyIOError, _>(
-                                            "Invalid UTF-8 in CSV file"
-                                        ))?;
+                                    let chunk_str = String::from_utf8(chunk).map_err(|_| {
+                                        PyErr::new::<pyo3::exceptions::PyIOError, _>(
+                                            "Invalid UTF-8 in CSV file",
+                                        )
+                                    })?;
                                     Ok((chunk_str, false)) // Data read
                                 }
-                                Err(e) => Err(PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
-                                    "Failed to read file {path}: {e}"
-                                )))
+                                Err(e) => Err(PyErr::new::<pyo3::exceptions::PyIOError, _>(
+                                    format!("Failed to read file {path}: {e}"),
+                                )),
                             }
                         } else {
-                        // Use Python file handle for Handle sources
-                        // Extract both file handle and event loop in a single spawn_blocking
-                        // This ensures we get them before moving into async context
-                        let file_handle_clone = file_handle.clone();
-                        let event_loop_clone = event_loop.clone();
-                        let (handle_py, loop_py) = tokio::task::spawn_blocking(move || {
-                            #[allow(deprecated)] // Python::with_gil is still required in blocking contexts (spawn_blocking)
-                            Python::with_gil(|py| -> PyResult<(Py<PyAny>, Py<PyAny>)> {
-                                // Extract file handle
-                                let handle_guard = file_handle_clone.lock().map_err(|_| {
-                                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                                        "Failed to lock file handle"
-                                    )
-                                })?;
-                                let handle = handle_guard.as_ref().ok_or_else(|| {
-                                    PyErr::new::<pyo3::exceptions::PyIOError, _>(
-                                        "File handle not available"
-                                    )
-                                })?;
-                                
-                                // Extract event loop
-                                let loop_guard = event_loop_clone.lock().map_err(|_| {
-                                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                                        "Failed to lock event loop"
-                                    )
-                                })?;
-                                let loop_obj = loop_guard.as_ref().ok_or_else(|| {
-                                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                                        "Event loop not available"
-                                    )
-                                })?;
-                                
-                                Ok((handle.clone_ref(py), loop_obj.clone_ref(py)))
+                            // Use Python file handle for Handle sources
+                            // Extract both file handle and event loop in a single spawn_blocking
+                            // This ensures we get them before moving into async context
+                            let file_handle_clone = file_handle.clone();
+                            let event_loop_clone = event_loop.clone();
+                            let (handle_py, loop_py) = tokio::task::spawn_blocking(move || {
+                                #[allow(deprecated)]
+                                // Python::with_gil is still required in blocking contexts (spawn_blocking)
+                                Python::with_gil(|py| -> PyResult<(Py<PyAny>, Py<PyAny>)> {
+                                    // Extract file handle
+                                    let handle_guard = file_handle_clone.lock().map_err(|_| {
+                                        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                                            "Failed to lock file handle",
+                                        )
+                                    })?;
+                                    let handle = handle_guard.as_ref().ok_or_else(|| {
+                                        PyErr::new::<pyo3::exceptions::PyIOError, _>(
+                                            "File handle not available",
+                                        )
+                                    })?;
+
+                                    // Extract event loop
+                                    let loop_guard = event_loop_clone.lock().map_err(|_| {
+                                        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                                            "Failed to lock event loop",
+                                        )
+                                    })?;
+                                    let loop_obj = loop_guard.as_ref().ok_or_else(|| {
+                                        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                                            "Event loop not available",
+                                        )
+                                    })?;
+
+                                    Ok((handle.clone_ref(py), loop_obj.clone_ref(py)))
+                                })
                             })
-                        })
-                        .await
-                        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
-                            "Failed to extract file handle or event loop: {e}"
-                        )))??;
-                        
-                        let chunk_str = read_from_python_file(handle_py, loop_py, chunk_size).await?;
-                        Ok((chunk_str.clone(), chunk_str.is_empty()))
+                            .await
+                            .map_err(|e| {
+                                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                                    "Failed to extract file handle or event loop: {e}"
+                                ))
+                            })??;
+
+                            let chunk_str =
+                                read_from_python_file(handle_py, loop_py, chunk_size).await?;
+                            Ok((chunk_str.clone(), chunk_str.is_empty()))
                         };
-                        
+
                         match chunk_result {
                             Ok((_chunk_str, true)) => {
                                 // EOF
@@ -1699,26 +1782,33 @@ impl AsyncDictReader {
                                 let mut csv_reader_builder = ReaderBuilder::new();
                                 csv_reader_builder.has_headers(false);
                                 dialect.apply_to_reader(&mut csv_reader_builder, None);
-                                let mut csv_reader = csv_reader_builder.from_reader(available_data.as_bytes());
+                                let mut csv_reader =
+                                    csv_reader_builder.from_reader(available_data.as_bytes());
                                 let mut records_iter = csv_reader.records();
 
                                 match records_iter.next() {
                                     Some(Ok(record)) => {
                                         let row: Vec<String> =
                                             record.iter().map(|s| s.to_string()).collect();
-                                        
-                                        let consumed_in_slice = csv_reader.position().byte() as usize;
-                                        
+
+                                        let consumed_in_slice =
+                                            csv_reader.position().byte() as usize;
+
                                         {
                                             let mut pos_guard = position.lock().await;
                                             *pos_guard = current_pos + 1;
                                         }
                                         {
                                             // Count newlines for accurate line_num tracking
-                                            let record_end = consumed_in_slice.min(available_data.len());
+                                            let record_end =
+                                                consumed_in_slice.min(available_data.len());
                                             let record_text = &available_data[..record_end];
-                                            let newline_count = record_text.as_bytes().iter().filter(|&&b| b == b'\n').count();
-                                            
+                                            let newline_count = record_text
+                                                .as_bytes()
+                                                .iter()
+                                                .filter(|&&b| b == b'\n')
+                                                .count();
+
                                             let mut line_num_guard = line_num.lock().await;
                                             if newline_count > 0 {
                                                 *line_num_guard += newline_count;
@@ -1755,7 +1845,7 @@ impl AsyncDictReader {
 
                     // Handle fieldnames
                     let mut fieldnames_guard = fieldnames.lock().await;
-                    
+
                     if need_fieldnames {
                         // First call - use row as fieldnames
                         match &row_vec {
@@ -1792,14 +1882,14 @@ impl AsyncDictReader {
                 #[allow(deprecated)] // Python::with_gil required in this async context
                 Python::with_gil(|#[allow(unused_variables)] py| -> PyResult<Py<PyAny>> {
                     let py_dict = PyDict::new(py);
-                    
+
                     // If EOF (empty row), return empty dict
                     if final_data_row.is_empty() {
                         return Ok(py_dict.unbind().into());
                     }
-                    
+
                     let fieldnames_slice = &fieldnames_vec;
-                    
+
                     // Map fieldnames to values
                     let restval_default = restval.as_deref().unwrap_or("");
                     for (i, fieldname) in fieldnames_slice.iter().enumerate() {
@@ -1811,15 +1901,16 @@ impl AsyncDictReader {
                         };
                         py_dict.set_item(fieldname, value)?;
                     }
-                    
+
                     // Handle restkey - extra values beyond fieldnames
                     if let Some(ref restkey_str) = restkey {
                         if final_data_row.len() > fieldnames_slice.len() {
-                            let extra_values: Vec<String> = final_data_row[fieldnames_slice.len()..].to_vec();
+                            let extra_values: Vec<String> =
+                                final_data_row[fieldnames_slice.len()..].to_vec();
                             py_dict.set_item(restkey_str, extra_values)?;
                         }
                     }
-                    
+
                     Ok(py_dict.unbind().into())
                 })
             };
@@ -1914,13 +2005,13 @@ impl AsyncDictReader {
                         names[pos] = new_name;
                         Ok(())
                     } else {
-                        Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                            format!("Field '{old_name}' not found in fieldnames")
-                        ))
+                        Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                            "Field '{old_name}' not found in fieldnames"
+                        )))
                     }
                 } else {
                     Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                        "Fieldnames not yet loaded. Read at least one row first."
+                        "Fieldnames not yet loaded. Read at least one row first.",
                     ))
                 }
             };
@@ -1937,11 +2028,11 @@ impl AsyncDictReader {
 struct AsyncDictWriter {
     #[allow(dead_code)] // Kept for compatibility, but we use stored state directly
     writer: Py<Writer>,
-    source: FileSource,  // Either Path(String) or Handle {file, event_loop}
-    path: String, // Store path separately for writeheader/writerow access
+    source: FileSource, // Either Path(String) or Handle {file, event_loop}
+    path: String,       // Store path separately for writeheader/writerow access
     file: Arc<Mutex<Option<File>>>, // Store file Arc for writeheader/writerow access - only used when source is Path
-    file_handle: Arc<StdMutex<Option<Py<PyAny>>>>,  // Python file handle when source is Handle
-    event_loop: Arc<StdMutex<Option<Py<PyAny>>>>,  // Event loop reference for run_coroutine_threadsafe
+    file_handle: Arc<StdMutex<Option<Py<PyAny>>>>, // Python file handle when source is Handle
+    event_loop: Arc<StdMutex<Option<Py<PyAny>>>>, // Event loop reference for run_coroutine_threadsafe
     dialect: DialectConfig, // Store dialect separately for writeheader/writerow access
     fieldnames: Vec<String>,
     extrasaction: String, // "raise" or "ignore"
@@ -2003,36 +2094,43 @@ impl AsyncDictWriter {
         )?;
         Python::attach(|py| {
             // Try to extract as string first (file path)
-            let (source, path_str, file_handle, event_loop) = if let Ok(path_str) = path_or_handle.extract::<String>() {
-                validate_path(&path_str)?;
-                (FileSource::Path(path_str.clone()), path_str, Arc::new(StdMutex::new(None)), Arc::new(StdMutex::new(None)))
-            } else {
-                // Assume it's a file-like object
-                let handle = path_or_handle.clone().unbind();
-                let placeholder_path = "<file_handle>".to_string();
-                
-                // Get the running event loop (required for aiofiles/rapfiles handles)
-                // Must be available during construction since we're in Python's context
-                let asyncio = py.import("asyncio")?;
-                let loop_obj = asyncio.call_method0("get_running_loop")
-                    .map_err(|_| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+            let (source, path_str, file_handle, event_loop) =
+                if let Ok(path_str) = path_or_handle.extract::<String>() {
+                    validate_path(&path_str)?;
+                    (
+                        FileSource::Path(path_str.clone()),
+                        path_str,
+                        Arc::new(StdMutex::new(None)),
+                        Arc::new(StdMutex::new(None)),
+                    )
+                } else {
+                    // Assume it's a file-like object
+                    let handle = path_or_handle.clone().unbind();
+                    let placeholder_path = "<file_handle>".to_string();
+
+                    // Get the running event loop (required for aiofiles/rapfiles handles)
+                    // Must be available during construction since we're in Python's context
+                    let asyncio = py.import("asyncio")?;
+                    let loop_obj = asyncio.call_method0("get_running_loop").map_err(|_| {
+                        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
                         "No running event loop found. File handles require a running event loop. \
                          Use 'async with' or ensure asyncio.run() has been called."
-                    ))?;
-                
-                let handle_clone = handle.clone_ref(py);
-                let loop_clone = loop_obj.unbind();
-                (
-                    FileSource::Handle {
-                        file: handle_clone.clone_ref(py),
-                        event_loop: loop_clone.clone_ref(py),
-                    },
-                    placeholder_path,
-                    Arc::new(StdMutex::new(Some(handle_clone))),
-                    Arc::new(StdMutex::new(Some(loop_clone))),  // Always store the loop
-                )
-            };
-            
+                    )
+                    })?;
+
+                    let handle_clone = handle.clone_ref(py);
+                    let loop_clone = loop_obj.unbind();
+                    (
+                        FileSource::Handle {
+                            file: handle_clone.clone_ref(py),
+                            event_loop: loop_clone.clone_ref(py),
+                        },
+                        placeholder_path,
+                        Arc::new(StdMutex::new(Some(handle_clone))),
+                        Arc::new(StdMutex::new(Some(loop_clone))), // Always store the loop
+                    )
+                };
+
             let writer = Writer::new(
                 py,
                 path_or_handle,
@@ -2075,36 +2173,28 @@ impl AsyncDictWriter {
             // Extract file handle and event loop BEFORE async block (while in Python context)
             let (handle_py_opt, loop_py_opt) = if !is_path {
                 let handle_guard = file_handle.lock().map_err(|_| {
-                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                        "Failed to lock file handle"
-                    )
+                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Failed to lock file handle")
                 })?;
                 let handle = handle_guard.as_ref().ok_or_else(|| {
-                    PyErr::new::<pyo3::exceptions::PyIOError, _>(
-                        "File handle not available"
-                    )
+                    PyErr::new::<pyo3::exceptions::PyIOError, _>("File handle not available")
                 })?;
-                
+
                 let loop_guard = event_loop.lock().map_err(|_| {
-                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                        "Failed to lock event loop"
-                    )
+                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Failed to lock event loop")
                 })?;
                 let loop_obj = loop_guard.as_ref().ok_or_else(|| {
-                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                        "Event loop not available"
-                    )
+                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Event loop not available")
                 })?;
-                
+
                 (Some(handle.clone_ref(py)), Some(loop_obj.clone_ref(py)))
             } else {
                 (None, None)
             };
-            
+
             // Move extracted values into async block
             let handle_py_for_async = handle_py_opt;
             let loop_py_for_async = loop_py_opt;
-            
+
             let future = async move {
                 // Write fieldnames as CSV row
                 let mut writer_builder = WriterBuilder::new();
@@ -2125,7 +2215,7 @@ impl AsyncDictWriter {
                         "Failed to finalize CSV record: {e}"
                     ))
                 })?;
-                
+
                 if is_path {
                     // Get or open the file handle
                     let mut file_guard = file.lock().await;
@@ -2158,23 +2248,19 @@ impl AsyncDictWriter {
                 } else {
                     // Use Python file handle for Handle sources
                     let csv_str = String::from_utf8(csv_data).map_err(|_| {
-                        PyErr::new::<pyo3::exceptions::PyIOError, _>(
-                            "Invalid UTF-8 in CSV data"
-                        )
+                        PyErr::new::<pyo3::exceptions::PyIOError, _>("Invalid UTF-8 in CSV data")
                     })?;
-                    
+
                     // Use the pre-extracted handle and loop
                     let handle_py = handle_py_for_async.ok_or_else(|| {
-                        PyErr::new::<pyo3::exceptions::PyIOError, _>(
-                            "File handle not available"
-                        )
+                        PyErr::new::<pyo3::exceptions::PyIOError, _>("File handle not available")
                     })?;
                     let loop_py = loop_py_for_async.ok_or_else(|| {
                         PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                            "Event loop not available"
+                            "Event loop not available",
                         )
                     })?;
-                    
+
                     write_to_python_file(handle_py, loop_py, csv_str).await?;
                 }
 
@@ -2197,12 +2283,14 @@ impl AsyncDictWriter {
         let fieldnames = self_.fieldnames.clone();
         let extrasaction = self_.extrasaction.clone();
         let restval = self_.restval.clone();
-        
+
         // Extract dict values in GIL context before async move
         let row = Python::attach(|#[allow(unused_variables)] py| -> PyResult<Vec<String>> {
             // Check for extra keys if extrasaction == "raise"
             if extrasaction == "raise" {
-                let dict_keys: Vec<String> = dict_row.keys().iter()
+                let dict_keys: Vec<String> = dict_row
+                    .keys()
+                    .iter()
                     .map(|k| k.extract::<String>().unwrap_or_default())
                     .collect();
                 for key in &dict_keys {
@@ -2213,13 +2301,14 @@ impl AsyncDictWriter {
                     }
                 }
             }
-            
+
             // Build Vec<String> ordered by fieldnames
             let mut row = Vec::new();
             for fieldname in &fieldnames {
                 match dict_row.get_item(fieldname) {
                     Ok(Some(value)) => {
-                        let value_str = value.extract::<String>()
+                        let value_str = value
+                            .extract::<String>()
                             .unwrap_or_else(|_| value.to_string());
                         row.push(value_str);
                     }
@@ -2231,41 +2320,33 @@ impl AsyncDictWriter {
             }
             Ok(row)
         })?;
-        
+
         Python::attach(|py| {
             // Extract file handle and event loop BEFORE async block (while in Python context)
             let (handle_py_opt, loop_py_opt) = if !is_path {
                 let handle_guard = file_handle.lock().map_err(|_| {
-                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                        "Failed to lock file handle"
-                    )
+                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Failed to lock file handle")
                 })?;
                 let handle = handle_guard.as_ref().ok_or_else(|| {
-                    PyErr::new::<pyo3::exceptions::PyIOError, _>(
-                        "File handle not available"
-                    )
+                    PyErr::new::<pyo3::exceptions::PyIOError, _>("File handle not available")
                 })?;
-                
+
                 let loop_guard = event_loop.lock().map_err(|_| {
-                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                        "Failed to lock event loop"
-                    )
+                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Failed to lock event loop")
                 })?;
                 let loop_obj = loop_guard.as_ref().ok_or_else(|| {
-                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                        "Event loop not available"
-                    )
+                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Event loop not available")
                 })?;
-                
+
                 (Some(handle.clone_ref(py)), Some(loop_obj.clone_ref(py)))
             } else {
                 (None, None)
             };
-            
+
             // Move extracted values into async block
             let handle_py_for_async = handle_py_opt;
             let loop_py_for_async = loop_py_opt;
-            
+
             let future = async move {
                 // Write row with CSV formatting
                 let mut writer_builder = WriterBuilder::new();
@@ -2286,7 +2367,7 @@ impl AsyncDictWriter {
                         "Failed to finalize CSV record: {e}"
                     ))
                 })?;
-                
+
                 if is_path {
                     // Get or open the file handle
                     let mut file_guard = file.lock().await;
@@ -2319,23 +2400,19 @@ impl AsyncDictWriter {
                 } else {
                     // Use Python file handle for Handle sources
                     let csv_str = String::from_utf8(csv_data).map_err(|_| {
-                        PyErr::new::<pyo3::exceptions::PyIOError, _>(
-                            "Invalid UTF-8 in CSV data"
-                        )
+                        PyErr::new::<pyo3::exceptions::PyIOError, _>("Invalid UTF-8 in CSV data")
                     })?;
-                    
+
                     // Use the pre-extracted handle and loop
                     let handle_py = handle_py_for_async.ok_or_else(|| {
-                        PyErr::new::<pyo3::exceptions::PyIOError, _>(
-                            "File handle not available"
-                        )
+                        PyErr::new::<pyo3::exceptions::PyIOError, _>("File handle not available")
                     })?;
                     let loop_py = loop_py_for_async.ok_or_else(|| {
                         PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                            "Event loop not available"
+                            "Event loop not available",
                         )
                     })?;
-                    
+
                     write_to_python_file(handle_py, loop_py, csv_str).await?;
                 }
 
@@ -2353,61 +2430,70 @@ impl AsyncDictWriter {
         let fieldnames = self_.fieldnames.clone();
         let extrasaction = self_.extrasaction.clone();
         let restval = self_.restval.clone();
-        
+
         // Convert all dicts to Vec<Vec<String>> in GIL context
-        let rows = Python::attach(|#[allow(unused_variables)] py| -> PyResult<Vec<Vec<String>>> {
-            let mut rows = Vec::new();
-            
-            // Try to get as PyList
-            #[allow(deprecated)] // TODO: migrate to Bound::cast when available
-            if let Ok(py_list) = dict_rows.downcast::<PyList>() {
-                for item in py_list.iter() {
-                    #[allow(deprecated)] // TODO: migrate to Bound::cast when available
-                    if let Ok(dict) = item.downcast::<PyDict>() {
-                        // Check for extra keys if extrasaction == "raise"
-                        if extrasaction == "raise" {
-                            let dict_keys: Vec<String> = dict.keys().iter()
-                                .map(|k| k.extract::<String>().unwrap_or_default())
-                                .collect();
-                            for key in &dict_keys {
-                                if !fieldnames.contains(key) {
-                                    return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                                        "dict contains fields not in fieldnames: {key}"
-                                    )));
+        let rows = Python::attach(
+            |#[allow(unused_variables)] py| -> PyResult<Vec<Vec<String>>> {
+                let mut rows = Vec::new();
+
+                // Try to get as PyList
+                #[allow(deprecated)] // TODO: migrate to Bound::cast when available
+                if let Ok(py_list) = dict_rows.downcast::<PyList>() {
+                    for item in py_list.iter() {
+                        #[allow(deprecated)] // TODO: migrate to Bound::cast when available
+                        if let Ok(dict) = item.downcast::<PyDict>() {
+                            // Check for extra keys if extrasaction == "raise"
+                            if extrasaction == "raise" {
+                                let dict_keys: Vec<String> = dict
+                                    .keys()
+                                    .iter()
+                                    .map(|k| k.extract::<String>().unwrap_or_default())
+                                    .collect();
+                                for key in &dict_keys {
+                                    if !fieldnames.contains(key) {
+                                        return Err(
+                                            PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                                                format!(
+                                                    "dict contains fields not in fieldnames: {key}"
+                                                ),
+                                            ),
+                                        );
+                                    }
                                 }
                             }
-                        }
-                        
-                        // Build Vec<String> ordered by fieldnames
-                        let mut row = Vec::new();
-                        for fieldname in &fieldnames {
-                            match dict.get_item(fieldname) {
-                                Ok(Some(value)) => {
-                                    let value_str = value.extract::<String>()
-                                        .unwrap_or_else(|_| value.to_string());
-                                    row.push(value_str);
-                                }
-                                Ok(None) | Err(_) => {
-                                    row.push(restval.clone());
+
+                            // Build Vec<String> ordered by fieldnames
+                            let mut row = Vec::new();
+                            for fieldname in &fieldnames {
+                                match dict.get_item(fieldname) {
+                                    Ok(Some(value)) => {
+                                        let value_str = value
+                                            .extract::<String>()
+                                            .unwrap_or_else(|_| value.to_string());
+                                        row.push(value_str);
+                                    }
+                                    Ok(None) | Err(_) => {
+                                        row.push(restval.clone());
+                                    }
                                 }
                             }
+                            rows.push(row);
+                        } else {
+                            return Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
+                                "writerows() requires a list of dictionaries",
+                            ));
                         }
-                        rows.push(row);
-                    } else {
-                        return Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
-                            "writerows() requires a list of dictionaries"
-                        ));
                     }
+                } else {
+                    return Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
+                        "writerows() requires a list of dictionaries",
+                    ));
                 }
-            } else {
-                return Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
-                    "writerows() requires a list of dictionaries"
-                ));
-            }
-            
-            Ok(rows)
-        })?;
-        
+
+                Ok(rows)
+            },
+        )?;
+
         Python::attach(|#[allow(unused_variables)] py| {
             let future = async move {
                 // Get or open the file handle
@@ -2522,11 +2608,11 @@ impl AsyncDictWriter {
 /// ```
 #[pyclass]
 struct Writer {
-    source: FileSource,  // Either Path(String) or Handle {file, event_loop}
-    path: String,  // Keep for backward compatibility and error messages
-    file: Arc<Mutex<Option<File>>>,  // Only used when source is Path
-    file_handle: Arc<StdMutex<Option<Py<PyAny>>>>,  // Python file handle when source is Handle
-    event_loop: Arc<StdMutex<Option<Py<PyAny>>>>,  // Event loop reference for run_coroutine_threadsafe
+    source: FileSource,             // Either Path(String) or Handle {file, event_loop}
+    path: String,                   // Keep for backward compatibility and error messages
+    file: Arc<Mutex<Option<File>>>, // Only used when source is Path
+    file_handle: Arc<StdMutex<Option<Py<PyAny>>>>, // Python file handle when source is Handle
+    event_loop: Arc<StdMutex<Option<Py<PyAny>>>>, // Event loop reference for run_coroutine_threadsafe
     dialect: DialectConfig,
     #[allow(dead_code)] // Will be used for buffering write operations in future
     write_size: usize, // Configurable buffer size for writing
@@ -2569,37 +2655,44 @@ impl Writer {
         write_size: Option<usize>,
     ) -> PyResult<Self> {
         // Try to extract as string first (file path)
-        let (source, path, file_handle, event_loop) = if let Ok(path_str) = path_or_handle.extract::<String>() {
-            validate_path(&path_str)?;
-            (FileSource::Path(path_str.clone()), path_str, Arc::new(StdMutex::new(None)), Arc::new(StdMutex::new(None)))
-        } else {
-            // Assume it's a file-like object
-            let handle = path_or_handle.clone().unbind();
-            // For file handles, use a placeholder path for error messages
-            let placeholder_path = "<file_handle>".to_string();
-            
-            // Get the running event loop (required for aiofiles/rapfiles handles)
-            // Must be available during construction since we're in Python's context
-            let asyncio = py.import("asyncio")?;
-            let loop_obj = asyncio.call_method0("get_running_loop")
-                .map_err(|_| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                    "No running event loop found. File handles require a running event loop. \
-                     Use 'async with' or ensure asyncio.run() has been called."
-                ))?;
-            
-            let handle_clone = handle.clone_ref(py);
-            let loop_clone = loop_obj.unbind();
-            (
-                FileSource::Handle {
-                    file: handle_clone.clone_ref(py),
-                    event_loop: loop_clone.clone_ref(py),
-                },
-                placeholder_path,
-                Arc::new(StdMutex::new(Some(handle_clone))),
-                Arc::new(StdMutex::new(Some(loop_clone))),  // Always store the loop
-            )
-        };
-        
+        let (source, path, file_handle, event_loop) =
+            if let Ok(path_str) = path_or_handle.extract::<String>() {
+                validate_path(&path_str)?;
+                (
+                    FileSource::Path(path_str.clone()),
+                    path_str,
+                    Arc::new(StdMutex::new(None)),
+                    Arc::new(StdMutex::new(None)),
+                )
+            } else {
+                // Assume it's a file-like object
+                let handle = path_or_handle.clone().unbind();
+                // For file handles, use a placeholder path for error messages
+                let placeholder_path = "<file_handle>".to_string();
+
+                // Get the running event loop (required for aiofiles/rapfiles handles)
+                // Must be available during construction since we're in Python's context
+                let asyncio = py.import("asyncio")?;
+                let loop_obj = asyncio.call_method0("get_running_loop").map_err(|_| {
+                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                        "No running event loop found. File handles require a running event loop. \
+                     Use 'async with' or ensure asyncio.run() has been called.",
+                    )
+                })?;
+
+                let handle_clone = handle.clone_ref(py);
+                let loop_clone = loop_obj.unbind();
+                (
+                    FileSource::Handle {
+                        file: handle_clone.clone_ref(py),
+                        event_loop: loop_clone.clone_ref(py),
+                    },
+                    placeholder_path,
+                    Arc::new(StdMutex::new(Some(handle_clone))),
+                    Arc::new(StdMutex::new(Some(loop_clone))), // Always store the loop
+                )
+            };
+
         let dialect = DialectConfig::from_python(
             delimiter,
             quotechar,
@@ -2650,27 +2743,27 @@ impl Writer {
                         "Failed to finalize CSV record: {e}"
                     ))
                 })?;
-                
+
                 if is_path {
                     // Use Tokio File for path-based sources
-                let mut file_guard = file.lock().await;
-                if file_guard.is_none() {
-                    use tokio::fs::OpenOptions;
-                    // Append mode - creates file if it doesn't exist
-                    *file_guard = Some(
-                        OpenOptions::new()
-                            .create(true)
-                            .append(true)
-                            .open(&path)
-                            .await
-                            .map_err(|e| {
-                                PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
-                                    "Failed to open file {path}: {e}"
-                                ))
-                            })?,
-                    );
-                }
-                let file_ref = file_guard.as_mut().unwrap();
+                    let mut file_guard = file.lock().await;
+                    if file_guard.is_none() {
+                        use tokio::fs::OpenOptions;
+                        // Append mode - creates file if it doesn't exist
+                        *file_guard = Some(
+                            OpenOptions::new()
+                                .create(true)
+                                .append(true)
+                                .open(&path)
+                                .await
+                                .map_err(|e| {
+                                    PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
+                                        "Failed to open file {path}: {e}"
+                                    ))
+                                })?,
+                        );
+                    }
+                    let file_ref = file_guard.as_mut().unwrap();
 
                     file_ref.write_all(&csv_data).await.map_err(|e| {
                         PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
@@ -2687,11 +2780,9 @@ impl Writer {
                 } else {
                     // Use Python file handle for Handle sources
                     let csv_str = String::from_utf8(csv_data).map_err(|_| {
-                        PyErr::new::<pyo3::exceptions::PyIOError, _>(
-                            "Invalid UTF-8 in CSV data"
-                        )
+                        PyErr::new::<pyo3::exceptions::PyIOError, _>("Invalid UTF-8 in CSV data")
                     })?;
-                    
+
                     // Extract handle and event loop together (stored during construction)
                     let file_handle_clone = file_handle.clone();
                     let event_loop_clone = event_loop.clone();
@@ -2727,7 +2818,7 @@ impl Writer {
                     .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
                         "Failed to extract file handle/event loop: {e}"
                     )))??;
-                    
+
                     write_to_python_file(handle_py, loop_py, csv_str).await?;
                 }
 
@@ -2753,21 +2844,21 @@ impl Writer {
                     dialect.apply_to_writer(&mut writer_builder);
                     let mut writer = writer_builder.from_writer(Vec::new());
                     writer.write_record(row).map_err(|e| {
-                    PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
-                        "Failed to write CSV record: {e}"
-                    ))
-                })?;
-                writer.flush().map_err(|e| {
-                    PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
-                        "Failed to flush CSV writer: {e}"
-                    ))
-                })?;
-                let csv_data = writer.into_inner().map_err(|e| {
-                    PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
-                        "Failed to finalize CSV record: {e}"
-                    ))
-                })?;
-                    
+                        PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
+                            "Failed to write CSV record: {e}"
+                        ))
+                    })?;
+                    writer.flush().map_err(|e| {
+                        PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
+                            "Failed to flush CSV writer: {e}"
+                        ))
+                    })?;
+                    let csv_data = writer.into_inner().map_err(|e| {
+                        PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
+                            "Failed to finalize CSV record: {e}"
+                        ))
+                    })?;
+
                     if is_path {
                         // Use Tokio File for path-based sources
                         let mut file_guard = file.lock().await;
@@ -2787,58 +2878,61 @@ impl Writer {
                             );
                         }
                         let file_ref = file_guard.as_mut().unwrap();
-                file_ref.write_all(&csv_data).await.map_err(|e| {
-                    PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
-                        "Failed to write file {path}: {e}"
-                    ))
-                })?;
+                        file_ref.write_all(&csv_data).await.map_err(|e| {
+                            PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
+                                "Failed to write file {path}: {e}"
+                            ))
+                        })?;
                     } else {
                         // Use Python file handle for Handle sources
                         let csv_str = String::from_utf8(csv_data).map_err(|_| {
                             PyErr::new::<pyo3::exceptions::PyIOError, _>(
-                                "Invalid UTF-8 in CSV data"
+                                "Invalid UTF-8 in CSV data",
                             )
                         })?;
-                        
+
                         // Extract both file handle and event loop in a single spawn_blocking
                         // This ensures we get them before moving into async context
                         let file_handle_clone = file_handle.clone();
                         let event_loop_clone = event_loop.clone();
                         let (handle_py, loop_py) = tokio::task::spawn_blocking(move || {
-                            #[allow(deprecated)] // Python::with_gil is still required in blocking contexts (spawn_blocking)
+                            #[allow(deprecated)]
+                            // Python::with_gil is still required in blocking contexts (spawn_blocking)
                             Python::with_gil(|py| -> PyResult<(Py<PyAny>, Py<PyAny>)> {
                                 // Extract file handle
                                 let handle_guard = file_handle_clone.lock().map_err(|_| {
                                     PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                                        "Failed to lock file handle"
+                                        "Failed to lock file handle",
                                     )
                                 })?;
                                 let handle = handle_guard.as_ref().ok_or_else(|| {
                                     PyErr::new::<pyo3::exceptions::PyIOError, _>(
-                                        "File handle not available"
+                                        "File handle not available",
                                     )
                                 })?;
-                                
+
                                 // Extract event loop
                                 let loop_guard = event_loop_clone.lock().map_err(|_| {
                                     PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                                        "Failed to lock event loop"
+                                        "Failed to lock event loop",
                                     )
                                 })?;
                                 let loop_obj = loop_guard.as_ref().ok_or_else(|| {
                                     PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                                        "Event loop not available"
+                                        "Event loop not available",
                                     )
                                 })?;
-                                
+
                                 Ok((handle.clone_ref(py), loop_obj.clone_ref(py)))
                             })
                         })
                         .await
-                        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
-                            "Failed to extract file handle or event loop: {e}"
-                        )))??;
-                        
+                        .map_err(|e| {
+                            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                                "Failed to extract file handle or event loop: {e}"
+                            ))
+                        })??;
+
                         write_to_python_file(handle_py, loop_py, csv_str).await?;
                     }
                 }
@@ -2847,11 +2941,11 @@ impl Writer {
                 if is_path {
                     let mut file_guard = file.lock().await;
                     if let Some(file_ref) = file_guard.as_mut() {
-                file_ref.flush().await.map_err(|e| {
-                    PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
-                        "Failed to flush file {path}: {e}"
-                    ))
-                })?;
+                        file_ref.flush().await.map_err(|e| {
+                            PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
+                                "Failed to flush file {path}: {e}"
+                            ))
+                        })?;
                     }
                 }
 
@@ -2869,14 +2963,14 @@ impl Writer {
             let future = async move {
                 if is_path {
                     // For path-based sources, close the Tokio File
-                let mut file_guard = file.lock().await;
-                if let Some(mut f) = file_guard.take() {
-                    f.flush().await.map_err(|e| {
-                        PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
-                            "Failed to flush file during close: {e}"
-                        ))
-                    })?;
-                }
+                    let mut file_guard = file.lock().await;
+                    if let Some(mut f) = file_guard.take() {
+                        f.flush().await.map_err(|e| {
+                            PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
+                                "Failed to flush file during close: {e}"
+                            ))
+                        })?;
+                    }
                 }
                 // For file handle sources, closing is managed by Python (context manager)
                 // No explicit close needed
