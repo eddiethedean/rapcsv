@@ -119,7 +119,7 @@ For detailed testing instructions, see [Testing Guide](https://github.com/eddiet
 
 ## Status
 
-**Current Version**: v0.2.0 - Phase 2 Complete ✅
+**Current Version**: v0.2.1 - Phase 2 Complete ✅
 
 For detailed status information, feature completion, and known limitations, see [Status](https://github.com/eddiethedean/rapcsv/blob/master/docs/STATUS.md).
 
