@@ -51,7 +51,7 @@ See the [rap-manifesto](https://github.com/eddiethedean/rap-manifesto) for philo
 pip install rapcsv
 ```
 
-For detailed installation instructions, including building from source and development setup, see [Installation Guide](https://github.com/eddiethedean/rapcsv/blob/main/docs/INSTALLATION.md).
+For detailed installation instructions, including building from source and development setup, see [Installation Guide](https://github.com/eddiethedean/rapcsv/blob/master/docs/INSTALLATION.md).
 
 ## Documentation
 
@@ -59,19 +59,19 @@ Comprehensive documentation is available in the `docs/` directory:
 
 ### User Guides
 
-- **[Usage Guide](https://github.com/eddiethedean/rapcsv/blob/main/docs/USAGE_GUIDE.md)** - Comprehensive examples and usage patterns
-- **[API Reference](https://github.com/eddiethedean/rapcsv/blob/main/docs/API_REFERENCE.md)** - Complete API documentation
-- **[Installation Guide](https://github.com/eddiethedean/rapcsv/blob/main/docs/INSTALLATION.md)** - Installation and setup instructions
+- **[Usage Guide](https://github.com/eddiethedean/rapcsv/blob/master/docs/USAGE_GUIDE.md)** - Comprehensive examples and usage patterns
+- **[API Reference](https://github.com/eddiethedean/rapcsv/blob/master/docs/API_REFERENCE.md)** - Complete API documentation
+- **[Installation Guide](https://github.com/eddiethedean/rapcsv/blob/master/docs/INSTALLATION.md)** - Installation and setup instructions
 
 ### Project Documentation
 
-- **[Status](https://github.com/eddiethedean/rapcsv/blob/main/docs/STATUS.md)** - Current development status and feature completion
+- **[Status](https://github.com/eddiethedean/rapcsv/blob/master/docs/STATUS.md)** - Current development status and feature completion
 - **[Roadmap](https://github.com/eddiethedean/rapcsv/blob/master/docs/ROADMAP.md)** - Detailed development plans and feature roadmap
-- **[Changelog](https://github.com/eddiethedean/rapcsv/blob/main/CHANGELOG.md)** - Version history and changes
-- **[Bugs and Improvements](https://github.com/eddiethedean/rapcsv/blob/main/BUGS_AND_IMPROVEMENTS.md)** - Known issues and limitations tracker
-- **[Testing Guide](https://github.com/eddiethedean/rapcsv/blob/main/docs/README_TESTING.md)** - Local development setup instructions
-- **[Release Checklist](https://github.com/eddiethedean/rapcsv/blob/main/docs/RELEASE_CHECKLIST.md)** - Release process and validation
-- **[Security](https://github.com/eddiethedean/rapcsv/blob/main/SECURITY.md)** - Security policy and vulnerability reporting
+- **[Changelog](https://github.com/eddiethedean/rapcsv/blob/master/CHANGELOG.md)** - Version history and changes
+- **[Bugs and Improvements](https://github.com/eddiethedean/rapcsv/blob/master/BUGS_AND_IMPROVEMENTS.md)** - Known issues and limitations tracker
+- **[Testing Guide](https://github.com/eddiethedean/rapcsv/blob/master/docs/README_TESTING.md)** - Local development setup instructions
+- **[Release Checklist](https://github.com/eddiethedean/rapcsv/blob/master/docs/RELEASE_CHECKLIST.md)** - Release process and validation
+- **[Security](https://github.com/eddiethedean/rapcsv/blob/master/SECURITY.md)** - Security policy and vulnerability reporting
 
 ---
 
@@ -95,11 +95,11 @@ async def main():
 asyncio.run(main())
 ```
 
-For comprehensive usage examples and patterns, see [Usage Guide](https://github.com/eddiethedean/rapcsv/blob/main/docs/USAGE_GUIDE.md).
+For comprehensive usage examples and patterns, see [Usage Guide](https://github.com/eddiethedean/rapcsv/blob/master/docs/USAGE_GUIDE.md).
 
 ## API Reference
 
-For complete API documentation, see [API Reference](https://github.com/eddiethedean/rapcsv/blob/main/docs/API_REFERENCE.md).
+For complete API documentation, see [API Reference](https://github.com/eddiethedean/rapcsv/blob/master/docs/API_REFERENCE.md).
 
 **Main Classes:**
 - `Reader` - Async CSV reader
@@ -115,13 +115,13 @@ For complete API documentation, see [API Reference](https://github.com/eddiethed
 
 `rapcsv` includes comprehensive test coverage with tests adapted from the [aiocsv test suite](https://github.com/MKuranowski/aiocsv/tree/master/tests) to validate compatibility.
 
-For detailed testing instructions, see [Testing Guide](https://github.com/eddiethedean/rapcsv/blob/main/docs/README_TESTING.md).
+For detailed testing instructions, see [Testing Guide](https://github.com/eddiethedean/rapcsv/blob/master/docs/README_TESTING.md).
 
 ## Status
 
 **Current Version**: v0.2.0 - Phase 2 Complete ✅
 
-For detailed status information, feature completion, and known limitations, see [Status](https://github.com/eddiethedean/rapcsv/blob/main/docs/STATUS.md).
+For detailed status information, feature completion, and known limitations, see [Status](https://github.com/eddiethedean/rapcsv/blob/master/docs/STATUS.md).
 
 ## Benchmarks
 
@@ -141,7 +141,7 @@ rap-bench detect rapcsv
 - [rapfiles](https://github.com/eddiethedean/rapfiles) - True async filesystem I/O
 - [rapsqlite](https://github.com/eddiethedean/rapsqlite) - True async SQLite
 
-For detailed release notes, see [CHANGELOG.md](https://github.com/eddiethedean/rapcsv/blob/main/CHANGELOG.md).
+For detailed release notes, see [CHANGELOG.md](https://github.com/eddiethedean/rapcsv/blob/master/CHANGELOG.md).
 
 ## Contributing
 
