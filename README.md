@@ -11,7 +11,7 @@
 
 `rapcsv` provides true async CSV reading and writing for Python, backed by Rust and Tokio. Unlike libraries that wrap blocking I/O in `async` syntax, `rapcsv` guarantees that all CSV operations execute **outside the Python GIL**, ensuring event loops never stall under load, even when processing large files.
 
-**Roadmap Goal**: Achieve drop-in replacement compatibility with `aiocsv`, enabling seamless migration with true async performance. See [docs/ROADMAP.md](docs/ROADMAP.md) for details.
+**Roadmap Goal**: Achieve drop-in replacement compatibility with `aiocsv`, enabling seamless migration with true async performance. See [docs/ROADMAP.md](https://github.com/eddiethedean/rapcsv/blob/master/docs/ROADMAP.md) for details.
 
 ## Why `rap*`?
 
@@ -66,7 +66,7 @@ Comprehensive documentation is available in the `docs/` directory:
 ### Project Documentation
 
 - **[Status](https://github.com/eddiethedean/rapcsv/blob/main/docs/STATUS.md)** - Current development status and feature completion
-- **[Roadmap](docs/ROADMAP.md)** - Detailed development plans and feature roadmap
+- **[Roadmap](https://github.com/eddiethedean/rapcsv/blob/master/docs/ROADMAP.md)** - Detailed development plans and feature roadmap
 - **[Changelog](https://github.com/eddiethedean/rapcsv/blob/main/CHANGELOG.md)** - Version history and changes
 - **[Bugs and Improvements](https://github.com/eddiethedean/rapcsv/blob/main/BUGS_AND_IMPROVEMENTS.md)** - Known issues and limitations tracker
 - **[Testing Guide](https://github.com/eddiethedean/rapcsv/blob/main/docs/README_TESTING.md)** - Local development setup instructions
