@@ -24,10 +24,9 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - name: Install Rust
-      uses: actions-rs/toolchain@v1
+      uses: dtolnay/rust-toolchain@stable
       with:
         toolchain: stable
-        override: true
 
     - name: Install maturin
       run: pip install maturin
@@ -80,11 +79,10 @@ jobs:
         python-version: '3.12'
 
     - name: Set up Rust
-      uses: actions-rs/toolchain@v1
+      uses: dtolnay/rust-toolchain@stable
       with:
         toolchain: stable
         components: clippy, rustfmt
-        override: true
 
     - name: Install Ruff
       run: pip install ruff
@@ -117,10 +115,9 @@ jobs:
         python-version: '3.12'
 
     - name: Install Rust
-      uses: actions-rs/toolchain@v1
+      uses: dtolnay/rust-toolchain@stable
       with:
         toolchain: stable
-        override: true
 
     - name: Install maturin
       run: pip install maturin

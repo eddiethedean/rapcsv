@@ -75,7 +75,9 @@ async def benchmark_rapcsv_read(filename: str, num_rows: int) -> float:
 
     # Allow some tolerance for empty lines
     assert rows_read >= num_rows + 1, f"Expected at least {num_rows + 1} rows, got {rows_read}"
-    assert iteration < max_iterations, f"Infinite loop detected - exceeded {max_iterations} iterations"
+    assert iteration < max_iterations, (
+        f"Infinite loop detected - exceeded {max_iterations} iterations"
+    )
     return elapsed
 
 
