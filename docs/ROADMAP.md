@@ -225,6 +225,7 @@ Focus: Feature additions, performance enhancements, and broader compatibility.
 - **Performance benchmarks** ✅
   - ✅ Comparison with `csv`, `aiocsv`, `pandas` - benchmark suite created
   - ✅ Throughput and latency metrics - benchmark suite measures rows/second
+  - ⏳ Match or surpass aiocsv performance - optimization goal for future releases
   - ⏳ Memory usage profiles - planned for Phase 3
   - ⏳ Concurrent operation benchmarks - planned for Phase 3
 
@@ -253,6 +254,7 @@ Focus: Advanced features, ecosystem integration, and zero-copy optimizations.
   - Memory-mapped file support for large files
   - Direct buffer passing to reduce allocations
   - SIMD-accelerated CSV parsing (where applicable)
+  - Performance optimizations to match or surpass aiocsv throughput
 
 ### Advanced Parsing Options
 

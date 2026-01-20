@@ -120,3 +120,6 @@ test_*.csv
 # Local testing artifacts
 test_artifacts/
 .LICENSE.backup
+
+# Posts
+posts/
